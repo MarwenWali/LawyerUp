@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LawyerUp Admin Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+
+    header {
+      background: linear-gradient(135deg, #2b6cb0 0%, #1e4d7b 100%);
+      color: white;
+      padding: 20px 40px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    header h1 {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 30px 20px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e6e6e6;
+    }
+
+    .tab-btn {
+      padding: 12px 20px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #666;
+      border-bottom: 3px solid transparent;
+      transition: all 0.3s;
+    }
+
+    .tab-btn.active {
+      color: #2b6cb0;
+      border-bottom-color: #2b6cb0;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .card-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .badge-approved {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .card-info {
+      margin: 12px 0;
+      font-size: 14px;
+      color: #666;
+    }
+
+    .card-info strong {
+      color: #333;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-approve {
+      background: #28a745;
+      color: white;
+      flex: 1;
+    }
+
+    .btn-approve:hover {
+      background: #218838;
+    }
+
+    .btn-reject {
+      background: #dc3545;
+      color: white;
+      flex: 1;
+    }
+
+    .btn-reject:hover {
+      background: #c82333;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: #2b6cb0;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚖️ LawyerUp Admin Dashboard</h1>
+    <p>Manage lawyer applications and approvals</p>
+  </header>
+
+  <div class="container">
+    <div class="stats" id="global-stats">
+      <div class="stat-card">
+        <div class="stat-number" id="total-users">0</div>
+        <div class="stat-label">Total Users</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="total-lawyers">0</div>
+        <div class="stat-label">Approved Lawyers</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="total-citizens">0</div>
+        <div class="stat-label">Citizens</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('pending')">📋 Pending Applications</button>
+      <button class="tab-btn" onclick="switchTab('approved')">✅ Approved Lawyers</button>
+      <button class="tab-btn" onclick="switchTab('rejected')">❌ Rejected Applications</button>
+    </div>
+
+    <!-- Pending Applications Tab -->
+    <div id="pending" class="tab-content active">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="pending-count">0</div>
+          <div class="stat-label">Pending Applications</div>
+        </div>
+      </div>
+      <div id="pending-list" class="cards-grid"></div>
+      <div id="pending-empty" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">📭</div>
+        <p>No pending applications at the moment</p>
+      </div>
+    </div>
+
+    <!-- Approved Lawyers Tab -->
+    <div id="approved" class="tab-content">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="approved-count">0</div>
+          <div class="stat-label">Approved Lawyers</div>
+        </div>
+      </div>
+      <div id="approved-list" class="cards-grid"></div>
+      <div id="approved-empty" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">📭</div>
+        <p>No approved lawyers yet</p>
+      </div>
+    </div>
+
+    <!-- Rejected Applications Tab -->
+    <div id="rejected" class="tab-content">
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="rejected-count">0</div>
+          <div class="stat-label">Rejected Applications</div>
+        </div>
+      </div>
+      <div id="rejected-list" class="cards-grid"></div>
+      <div id="rejected-empty" class="empty-state" style="display: none;">
+        <div class="empty-state-icon">📭</div>
+        <p>No rejected applications</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabName).classList.add('active');
+      event.target.classList.add('active');
+      loadData();
+    }
+
+    async function loadData() {
+      try {
+        const pendingRes = await fetch(`${API_URL}/api/pending-lawyers`);
+        const approvedRes = await fetch(`${API_URL}/api/approved-lawyers`);
+        const rejectedRes = await fetch(`${API_URL}/api/rejected-lawyers`);
+        const statsRes = await fetch(`${API_URL}/api/stats`);
+
+        const pending = await pendingRes.json();
+        const approved = await approvedRes.json();
+        const rejected = await rejectedRes.json();
+        const stats = await statsRes.json();
+
+        renderStats(stats);
+        renderPending(pending);
+        renderApproved(approved);
+        renderRejected(rejected);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      }
+    }
+
+    function renderStats(stats) {
+      document.getElementById('total-users').textContent = stats.totalUsers;
+      document.getElementById('total-lawyers').textContent = stats.totalLawyers;
+      document.getElementById('total-citizens').textContent = stats.totalCitizens;
+    }
+
+    function renderPending(lawyers) {
+      const container = document.getElementById('pending-list');
+      const empty = document.getElementById('pending-empty');
+      const count = document.getElementById('pending-count');
+
+      count.textContent = lawyers.length;
+
+      if (lawyers.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+
+      empty.style.display = 'none';
+      container.innerHTML = lawyers.map(lawyer => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-name">${lawyer.name}</div>
+            <span class="badge badge-pending">Pending</span>
+          </div>
+          <div class="card-info">
+            <strong>Specialization:</strong> ${lawyer.specialization}
+          </div>
+          <div class="card-info">
+            <strong>Email:</strong> ${lawyer.email}
+          </div>
+          <div class="card-info">
+            <strong>Phone:</strong> ${lawyer.phone}
+          </div>
+          <div class="card-info">
+            <strong>Submitted:</strong> ${new Date(lawyer.submittedAt).toLocaleDateString()}
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-approve" onclick="approveLawyer('${lawyer.id}')">✓ Approve</button>
+            <button class="btn btn-reject" onclick="rejectLawyer('${lawyer.id}')">✗ Reject</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderApproved(lawyers) {
+      const container = document.getElementById('approved-list');
+      const empty = document.getElementById('approved-empty');
+      const count = document.getElementById('approved-count');
+
+      count.textContent = lawyers.length;
+
+      if (lawyers.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+
+      empty.style.display = 'none';
+      container.innerHTML = lawyers.map(lawyer => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-name">${lawyer.name}</div>
+            <span class="badge badge-approved">Approved</span>
+          </div>
+          <div class="card-info">
+            <strong>Specialization:</strong> ${lawyer.specialization}
+          </div>
+          <div class="card-info">
+            <strong>Email:</strong> ${lawyer.email}
+          </div>
+          <div class="card-info">
+            <strong>Phone:</strong> ${lawyer.phone}
+          </div>
+          <div class="card-info">
+            <strong>Approved:</strong> ${new Date(lawyer.approvedAt).toLocaleDateString()}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderRejected(lawyers) {
+      const container = document.getElementById('rejected-list');
+      const empty = document.getElementById('rejected-empty');
+      const count = document.getElementById('rejected-count');
+
+      count.textContent = lawyers.length;
+
+      if (lawyers.length === 0) {
+        container.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+
+      empty.style.display = 'none';
+      container.innerHTML = lawyers.map(lawyer => `
+        <div class="card">
+          <div class="card-header">
+            <div class="card-name">${lawyer.name}</div>
+            <span class="badge badge-pending">Rejected</span>
+          </div>
+          <div class="card-info">
+            <strong>Specialization:</strong> ${lawyer.specialization}
+          </div>
+          <div class="card-info">
+            <strong>Email:</strong> ${lawyer.email}
+          </div>
+          <div class="card-info">
+            <strong>Phone:</strong> ${lawyer.phone}
+          </div>
+          <div class="card-info">
+            <strong>Rejected:</strong> ${new Date(lawyer.rejectedAt).toLocaleDateString()}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function approveLawyer(id) {
+      if (!confirm('Are you sure you want to approve this lawyer?')) return;
+
+      try {
+        const res = await fetch(`${API_URL}/api/approve-lawyer/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fees: 50 }) });
+        if (res.ok) {
+          alert('Lawyer approved successfully!');
+          loadData();
+        } else {
+          alert('Error approving lawyer');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    }
+
+    async function rejectLawyer(id) {
+      if (!confirm('Are you sure you want to reject this lawyer?')) return;
+
+      try {
+        const res = await fetch(`${API_URL}/api/reject-lawyer/${id}`, { method: 'POST' });
+        if (res.ok) {
+          alert('Lawyer rejected successfully!');
+          loadData();
+        } else {
+          alert('Error rejecting lawyer');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    }
+
+    // Load data on page load
+    loadData();
+  </script>
+</body>
+</html>
