@@ -3,6 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'reac
 import * as ImagePicker from 'expo-image-picker';
 import { AppContext } from '../context/AppContext';
 
+import { API_URL } from '../config';
+
 const AuthScreen = ({ navigate }) => {
   const { setUser } = useContext(AppContext);
   const [step, setStep] = useState('choose');
@@ -12,32 +14,68 @@ const AuthScreen = ({ navigate }) => {
   const [diplomaUri, setDiplomaUri] = useState(null);
 
   const pickDiploma = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-    if (!result.canceled) {
-      setDiplomaUri(result.assets[0].uri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+      if (!result.canceled) {
+        setDiplomaUri(result.assets[0].uri);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not open image picker: ' + error.message);
     }
   };
 
-  const handleCitizenSignup = () => {
+  const handleCitizenSignup = async () => {
     if (!email || !name) return Alert.alert('Fill all fields');
-    setUser({ type: 'citizen', name, email, phone, approved: true });
-    navigate({ name: 'chat' });
+    try {
+      const response = await fetch(`${API_URL}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, type: 'citizen' })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Signup failed');
+
+      setUser({ ...data.user, approved: true });
+      navigate({ name: 'chat' });
+    } catch (error) {
+      console.error('Signup Error:', error);
+      Alert.alert('Signup Failed', error.message || 'Network request failed. Check your internet or server.');
+    }
   };
 
-  const handleLawyerSignup = () => {
+  const handleLawyerSignup = async () => {
     if (!email || !name || !diplomaUri) return Alert.alert('Fill all fields and upload diploma');
-    Alert.alert('Lawyer Signup', 'Your application has been submitted. Await admin approval.');
-    setUser({ type: 'lawyer', name, email, phone, diploma: diplomaUri, approved: false });
-    navigate({ name: 'chat' });
+    try {
+      const response = await fetch(`${API_URL}/api/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          type: 'lawyer',
+          diploma: diplomaUri // Sending the URI string for now
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Signup failed');
+
+      Alert.alert('Success', 'Your lawyer application has been submitted and is awaiting approval.');
+      setUser({ ...data.user, approved: false }); // Pending
+      navigate({ name: 'chat' });
+    } catch (error) {
+      console.error('Signup Error:', error);
+      Alert.alert('Signup Failed', error.message || 'Network request failed. Check your internet or server.');
+    }
   };
 
   const handleSignin = () => {
     if (!email) return Alert.alert('Enter email');
+    // Basic mock signin - in real app would verify credentials
     setUser({ type: 'citizen', name: name || email, email, approved: true });
     navigate({ name: 'chat' });
   };
@@ -66,8 +104,8 @@ const AuthScreen = ({ navigate }) => {
         <TouchableOpacity onPress={() => setStep('choose')}><Text style={{ color: '#2b6cb0', marginBottom: 12 }}>← Back</Text></TouchableOpacity>
         <Text style={styles.title}>Sign Up as Citizen</Text>
         <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName} />
-        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Phone (optional)" value={phone} onChangeText={setPhone} />
+        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        <TextInput style={styles.input} placeholder="Phone (optional)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
         <TouchableOpacity style={styles.actionBtn} onPress={handleCitizenSignup}>
           <Text style={{ color: '#fff', fontWeight: '600' }}>Sign Up</Text>
         </TouchableOpacity>
@@ -81,8 +119,8 @@ const AuthScreen = ({ navigate }) => {
         <TouchableOpacity onPress={() => setStep('choose')}><Text style={{ color: '#2b6cb0', marginBottom: 12 }}>← Back</Text></TouchableOpacity>
         <Text style={styles.title}>Sign Up as Lawyer</Text>
         <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName} />
-        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Phone" value={phone} onChangeText={setPhone} />
+        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+        <TextInput style={styles.input} placeholder="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
         <TouchableOpacity style={styles.uploadBtn} onPress={pickDiploma}>
           <Text style={styles.uploadBtnText}>{diplomaUri ? '📄 Diploma Uploaded' : '📤 Upload Diploma/License'}</Text>
         </TouchableOpacity>
@@ -98,7 +136,7 @@ const AuthScreen = ({ navigate }) => {
       <View style={styles.container}>
         <TouchableOpacity onPress={() => setStep('choose')}><Text style={{ color: '#2b6cb0', marginBottom: 12 }}>← Back</Text></TouchableOpacity>
         <Text style={styles.title}>Sign In</Text>
-        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
+        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
         <TouchableOpacity style={styles.actionBtn} onPress={handleSignin}>
           <Text style={{ color: '#fff', fontWeight: '600' }}>Sign In</Text>
         </TouchableOpacity>

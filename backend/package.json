@@ -1,5 +1,5 @@
 {
-  "name": "lawyerup-admin-dashboard",
+  "name": "lawyerup-backend",
   "version": "1.0.0",
   "description": "Admin dashboard for LawyerUp app",
   "main": "server.js",
@@ -8,8 +8,10 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "sequelize": "^6.37.7",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

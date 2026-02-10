@@ -1,5 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useContext } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { ThemeContext } from '../context/ThemeContext';
+import { API_URL } from '../config';
 
 const sample = [
   { id: '1', name: 'Mehdi Ben Ali', specialization: 'Family Law', phone: '+216 20 000 000', email: 'mehdi@example.com', fees: 50, rating: 4.5, bio: 'Experienced family lawyer.', experience: 10 },
@@ -9,6 +11,7 @@ const sample = [
 ];
 
 const LawyersList = ({ navigate }) => {
+  const { colors, isDark } = useContext(ThemeContext);
   const [lawyers, setLawyers] = useState(sample);
   const [loading, setLoading] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
@@ -26,13 +29,14 @@ const LawyersList = ({ navigate }) => {
   const fetchApprovedLawyers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/approved-lawyers');
+      const response = await fetch(`${API_URL}/api/approved-lawyers`);
+      if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
-      if (data.length > 0) {
+      if (Array.isArray(data) && data.length > 0) {
         setLawyers(data);
       }
     } catch (error) {
-      console.log('Using sample lawyers (admin dashboard not accessible)');
+      console.log('Using sample lawyers (admin dashboard not accessible or empty)', error);
       setLawyers(sample);
     } finally {
       setLoading(false);
@@ -64,17 +68,17 @@ const LawyersList = ({ navigate }) => {
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2b6cb0" style={{ marginTop: 50 }} />
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Lawyers</Text>
-        <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterVisible(true)}>
+        <Text style={[styles.title, { color: colors.text }]}>Lawyers</Text>
+        <TouchableOpacity style={[styles.filterBtn, { backgroundColor: colors.primary }]} onPress={() => setFilterVisible(true)}>
           <Text style={styles.filterBtnText}>🔍 Filter</Text>
         </TouchableOpacity>
       </View>
@@ -82,94 +86,99 @@ const LawyersList = ({ navigate }) => {
         data={filteredLawyers}
         keyExtractor={(i) => i.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.item} onPress={() => navigate({ name: 'lawyerProfile', params: { lawyer: item } })}>
-            <Text style={{ fontWeight: '700' }}>{item.name}</Text>
-            <Text style={{ color: '#666', fontSize: 12 }}>{item.specialization}</Text>
-            <Text style={{ color: '#999', fontSize: 12 }}>⭐ {item.rating} | {item.fees} TND | {item.experience} yrs</Text>
+          <TouchableOpacity style={[styles.item, { backgroundColor: colors.surface }]} onPress={() => navigate({ name: 'lawyerProfile', params: { lawyer: item } })}>
+            <Text style={{ fontWeight: '700', color: colors.text }}>{item.name}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{item.specialization}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>⭐ {item.rating} | {item.fees} TND | {item.experience} yrs</Text>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: '#666' }}>No lawyers match your filters</Text>}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: colors.textSecondary }}>No lawyers match your filters</Text>}
       />
 
       <Modal visible={filterVisible} transparent animationType="slide">
         <View style={styles.modalWrap}>
-          <ScrollView style={styles.modalBox}>
+          <ScrollView style={[styles.modalBox, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Lawyers</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Filter Lawyers</Text>
               <TouchableOpacity onPress={() => setFilterVisible(false)}>
-                <Text style={styles.closeBtn}>✕</Text>
+                <Text style={[styles.closeBtn, { color: colors.textSecondary }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.label}>Specialization</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Specialization</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               <TouchableOpacity
-                style={[styles.tag, selectedSpec === '' && styles.tagActive]}
+                style={[styles.tag, { backgroundColor: selectedSpec === '' ? colors.primary : colors.background, borderColor: colors.border }]}
                 onPress={() => setSelectedSpec('')}
               >
-                <Text style={[styles.tagText, selectedSpec === '' && styles.tagTextActive]}>All</Text>
+                <Text style={[styles.tagText, { color: selectedSpec === '' ? '#fff' : colors.text }]}>All</Text>
               </TouchableOpacity>
               {specializations.map((spec) => (
                 <TouchableOpacity
                   key={spec}
-                  style={[styles.tag, selectedSpec === spec && styles.tagActive]}
+                  style={[styles.tag, { backgroundColor: selectedSpec === spec ? colors.primary : colors.background, borderColor: colors.border }]}
                   onPress={() => setSelectedSpec(spec)}
                 >
-                  <Text style={[styles.tagText, selectedSpec === spec && styles.tagTextActive]}>{spec}</Text>
+                  <Text style={[styles.tagText, { color: selectedSpec === spec ? '#fff' : colors.text }]}>{spec}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
-            <Text style={styles.label}>Fee Range (TND)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Fee Range (TND)</Text>
             <View style={styles.row}>
               <TextInput
-                style={[styles.input, { flex: 1, marginRight: 8 }]}
+                style={[styles.input, { flex: 1, marginRight: 8, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
                 placeholder="Min"
+                placeholderTextColor={colors.textSecondary}
                 value={minFees}
                 onChangeText={setMinFees}
                 keyboardType="numeric"
               />
               <TextInput
-                style={[styles.input, { flex: 1 }]}
+                style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
                 placeholder="Max"
+                placeholderTextColor={colors.textSecondary}
                 value={maxFees}
                 onChangeText={setMaxFees}
                 keyboardType="numeric"
               />
             </View>
 
-            <Text style={styles.label}>Minimum Rating</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Minimum Rating</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
               placeholder="e.g., 4.0"
+              placeholderTextColor={colors.textSecondary}
               value={minRating}
               onChangeText={setMinRating}
               keyboardType="decimal-pad"
             />
 
-            <Text style={styles.label}>Experience (Years)</Text>
+            <Text style={[styles.label, { color: colors.text }]}>Experience (Years)</Text>
             <View style={styles.row}>
               <TextInput
-                style={[styles.input, { flex: 1, marginRight: 8 }]}
+                style={[styles.input, { flex: 1, marginRight: 8, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
                 placeholder="Min"
+                placeholderTextColor={colors.textSecondary}
                 value={minExp}
                 onChangeText={setMinExp}
                 keyboardType="numeric"
               />
               <TextInput
-                style={[styles.input, { flex: 1 }]}
+                style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
                 placeholder="Max"
+                placeholderTextColor={colors.textSecondary}
                 value={maxExp}
                 onChangeText={setMaxExp}
                 keyboardType="numeric"
               />
             </View>
 
-            <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterVisible(false)}>
+            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={() => setFilterVisible(false)}>
               <Text style={{ color: '#fff', fontWeight: '600' }}>Apply Filters</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.resetBtn} onPress={handleResetFilters}>
-              <Text style={{ color: '#2b6cb0', fontWeight: '600' }}>Reset</Text>
+            <TouchableOpacity style={[styles.resetBtn, { borderColor: colors.primary }]} onPress={handleResetFilters}>
+              <Text style={{ color: colors.primary, fontWeight: '600' }}>Reset</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -182,23 +191,21 @@ const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 20, fontWeight: '700' },
-  filterBtn: { backgroundColor: '#2b6cb0', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
+  filterBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
   filterBtnText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  item: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 8 },
-  modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#fff', padding: 16, borderRadius: 12, maxHeight: '80%' },
+  item: { padding: 12, borderRadius: 8, marginBottom: 8 },
+  modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalBox: { padding: 16, borderRadius: 12, maxHeight: '80%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 18, fontWeight: '700' },
-  closeBtn: { fontSize: 20, color: '#666' },
+  closeBtn: { fontSize: 20 },
   label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  tag: { backgroundColor: '#f4f6fb', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#e6e6e6' },
-  tagActive: { backgroundColor: '#2b6cb0', borderColor: '#2b6cb0' },
-  tagText: { color: '#666', fontSize: 12 },
-  tagTextActive: { color: '#fff' },
+  tag: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginRight: 8, borderWidth: 1 },
+  tagText: { fontSize: 12 },
   row: { flexDirection: 'row', marginBottom: 16 },
-  input: { borderWidth: 1, borderColor: '#e6e6e6', padding: 10, borderRadius: 6, marginBottom: 16 },
-  applyBtn: { backgroundColor: '#2b6cb0', padding: 12, borderRadius: 6, alignItems: 'center', marginBottom: 8 },
-  resetBtn: { borderWidth: 1, borderColor: '#2b6cb0', padding: 12, borderRadius: 6, alignItems: 'center' },
+  input: { borderWidth: 1, padding: 10, borderRadius: 6, marginBottom: 16 },
+  applyBtn: { padding: 12, borderRadius: 6, alignItems: 'center', marginBottom: 8 },
+  resetBtn: { borderWidth: 1, padding: 12, borderRadius: 6, alignItems: 'center' },
 });
 
 export default LawyersList;
