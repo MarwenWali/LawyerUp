@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect, useContext } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, FlatList, StyleSheet, ScrollView } from 'react-native';
+import { Text, Card, Button, Modal, Portal, TextInput, Chip, ActivityIndicator, Searchbar, IconButton, useTheme } from 'react-native-paper';
 import { ThemeContext } from '../context/ThemeContext';
 import { API_URL } from '../config';
+
 
 const sample = [
   { id: '1', name: 'Mehdi Ben Ali', specialization: 'Family Law', phone: '+216 20 000 000', email: 'mehdi@example.com', fees: 50, rating: 4.5, bio: 'Experienced family lawyer.', experience: 10 },
@@ -11,7 +13,11 @@ const sample = [
 ];
 
 const LawyersList = ({ navigate }) => {
-  const { colors, isDark } = useContext(ThemeContext);
+  const { colors: themeColors, isDark } = useContext(ThemeContext);
+  const theme = useTheme();
+  const colors = theme.colors; // Use Paper colors preferably, but keep custom theme logic if needed
+  // Merging custom colors with paper colors for now or just using paper colors
+
   const [lawyers, setLawyers] = useState(sample);
   const [loading, setLoading] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
@@ -29,14 +35,27 @@ const LawyersList = ({ navigate }) => {
   const fetchApprovedLawyers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/approved-lawyers`);
+
+      // Add timeout to fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+      const response = await fetch(`${API_URL}/api/approved-lawyers`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
       if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
         setLawyers(data);
+      } else {
+        // If no lawyers in DB, use sample data
+        setLawyers(sample);
       }
     } catch (error) {
-      console.log('Using sample lawyers (admin dashboard not accessible or empty)', error);
+      console.log('Using sample lawyers (backend not reachable or timeout):', error.message);
+      // Always fall back to sample data if API fails
       setLawyers(sample);
     } finally {
       setLoading(false);
@@ -69,7 +88,7 @@ const LawyersList = ({ navigate }) => {
   if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 50 }} />
+        <ActivityIndicator animating={true} size="large" color={colors.primary} style={{ marginTop: 50 }} />
       </View>
     );
   }
@@ -77,112 +96,124 @@ const LawyersList = ({ navigate }) => {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: colors.text }]}>Lawyers</Text>
-        <TouchableOpacity style={[styles.filterBtn, { backgroundColor: colors.primary }]} onPress={() => setFilterVisible(true)}>
-          <Text style={styles.filterBtnText}>🔍 Filter</Text>
-        </TouchableOpacity>
+        <Text variant="headlineMedium" style={{ color: colors.onBackground, fontWeight: 'bold' }}>Lawyers</Text>
+        <Button mode="contained" icon="filter" onPress={() => setFilterVisible(true)}>
+          Filter
+        </Button>
       </View>
       <FlatList
         data={filteredLawyers}
         keyExtractor={(i) => i.id}
+        contentContainerStyle={{ paddingBottom: 20 }}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.item, { backgroundColor: colors.surface }]} onPress={() => navigate({ name: 'lawyerProfile', params: { lawyer: item } })}>
-            <Text style={{ fontWeight: '700', color: colors.text }}>{item.name}</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{item.specialization}</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>⭐ {item.rating} | {item.fees} TND | {item.experience} yrs</Text>
-          </TouchableOpacity>
+          <Card style={styles.card} onPress={() => navigate({ name: 'lawyerProfile', params: { lawyer: item } })}>
+            <Card.Title
+              title={item.name}
+              subtitle={item.specialization}
+              left={(props) => <IconButton {...props} icon="account" />}
+            />
+            <Card.Content>
+              <Text variant="bodyMedium">⭐ {item.rating} | {item.fees} TND | {item.experience} yrs</Text>
+              <Text variant="bodySmall" numberOfLines={2} style={{ marginTop: 4, color: 'gray' }}>{item.bio}</Text>
+            </Card.Content>
+          </Card>
         )}
-        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: colors.textSecondary }}>No lawyers match your filters</Text>}
+        ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>No lawyers match your filters</Text>}
       />
 
-      <Modal visible={filterVisible} transparent animationType="slide">
-        <View style={styles.modalWrap}>
-          <ScrollView style={[styles.modalBox, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Filter Lawyers</Text>
-              <TouchableOpacity onPress={() => setFilterVisible(false)}>
-                <Text style={[styles.closeBtn, { color: colors.textSecondary }]}>✕</Text>
-              </TouchableOpacity>
-            </View>
+      <Portal>
+        <Modal visible={filterVisible} onDismiss={() => setFilterVisible(false)} contentContainerStyle={[styles.modalBox, { backgroundColor: colors.surface }]}>
+          <View style={styles.modalHeader}>
+            <Text variant="titleLarge">Filter Lawyers</Text>
+            <IconButton icon="close" onPress={() => setFilterVisible(false)} />
+          </View>
 
-            <Text style={[styles.label, { color: colors.text }]}>Specialization</Text>
+          <ScrollView>
+            <Text style={styles.label}>Specialization</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-              <TouchableOpacity
-                style={[styles.tag, { backgroundColor: selectedSpec === '' ? colors.primary : colors.background, borderColor: colors.border }]}
+              <Chip
+                selected={selectedSpec === ''}
                 onPress={() => setSelectedSpec('')}
+                style={styles.chip}
+                mode="outlined"
               >
-                <Text style={[styles.tagText, { color: selectedSpec === '' ? '#fff' : colors.text }]}>All</Text>
-              </TouchableOpacity>
+                All
+              </Chip>
               {specializations.map((spec) => (
-                <TouchableOpacity
+                <Chip
                   key={spec}
-                  style={[styles.tag, { backgroundColor: selectedSpec === spec ? colors.primary : colors.background, borderColor: colors.border }]}
+                  selected={selectedSpec === spec}
                   onPress={() => setSelectedSpec(spec)}
+                  style={styles.chip}
+                  mode="outlined"
                 >
-                  <Text style={[styles.tagText, { color: selectedSpec === spec ? '#fff' : colors.text }]}>{spec}</Text>
-                </TouchableOpacity>
+                  {spec}
+                </Chip>
               ))}
             </ScrollView>
 
-            <Text style={[styles.label, { color: colors.text }]}>Fee Range (TND)</Text>
+            <Text style={styles.label}>Fee Range (TND)</Text>
             <View style={styles.row}>
               <TextInput
-                style={[styles.input, { flex: 1, marginRight: 8, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
-                placeholder="Min"
-                placeholderTextColor={colors.textSecondary}
+                mode="outlined"
+                label="Min"
+                style={[styles.input, { flex: 1, marginRight: 8 }]}
                 value={minFees}
                 onChangeText={setMinFees}
                 keyboardType="numeric"
+                dense
               />
               <TextInput
-                style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
-                placeholder="Max"
-                placeholderTextColor={colors.textSecondary}
+                mode="outlined"
+                label="Max"
+                style={[styles.input, { flex: 1 }]}
                 value={maxFees}
                 onChangeText={setMaxFees}
                 keyboardType="numeric"
+                dense
               />
             </View>
 
-            <Text style={[styles.label, { color: colors.text }]}>Minimum Rating</Text>
+            <Text style={styles.label}>Minimum Rating</Text>
             <TextInput
-              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
-              placeholder="e.g., 4.0"
-              placeholderTextColor={colors.textSecondary}
+              mode="outlined"
+              label="e.g., 4.0"
+              style={styles.input}
               value={minRating}
               onChangeText={setMinRating}
               keyboardType="decimal-pad"
+              dense
             />
 
-            <Text style={[styles.label, { color: colors.text }]}>Experience (Years)</Text>
+            <Text style={styles.label}>Experience (Years)</Text>
             <View style={styles.row}>
               <TextInput
-                style={[styles.input, { flex: 1, marginRight: 8, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
-                placeholder="Min"
-                placeholderTextColor={colors.textSecondary}
+                mode="outlined"
+                label="Min"
+                style={[styles.input, { flex: 1, marginRight: 8 }]}
                 value={minExp}
                 onChangeText={setMinExp}
                 keyboardType="numeric"
+                dense
               />
               <TextInput
-                style={[styles.input, { flex: 1, color: colors.text, borderColor: colors.border, backgroundColor: isDark ? '#333' : '#fff' }]}
-                placeholder="Max"
-                placeholderTextColor={colors.textSecondary}
+                mode="outlined"
+                label="Max"
+                style={[styles.input, { flex: 1 }]}
                 value={maxExp}
                 onChangeText={setMaxExp}
                 keyboardType="numeric"
+                dense
               />
             </View>
 
-            <TouchableOpacity style={[styles.applyBtn, { backgroundColor: colors.primary }]} onPress={() => setFilterVisible(false)}>
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Apply Filters</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.resetBtn, { borderColor: colors.primary }]} onPress={handleResetFilters}>
-              <Text style={{ color: colors.primary, fontWeight: '600' }}>Reset</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+              <Button mode="text" onPress={handleResetFilters}>Reset</Button>
+              <Button mode="contained" onPress={() => setFilterVisible(false)}>Apply</Button>
+            </View>
           </ScrollView>
-        </View>
-      </Modal>
+        </Modal>
+      </Portal>
     </View>
   );
 };
@@ -190,22 +221,13 @@ const LawyersList = ({ navigate }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 20, fontWeight: '700' },
-  filterBtn: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 6 },
-  filterBtnText: { color: '#fff', fontWeight: '600', fontSize: 12 },
-  item: { padding: 12, borderRadius: 8, marginBottom: 8 },
-  modalWrap: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox: { padding: 16, borderRadius: 12, maxHeight: '80%' },
+  card: { marginBottom: 12 },
+  modalBox: { padding: 20, margin: 20, borderRadius: 8 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '700' },
-  closeBtn: { fontSize: 20 },
-  label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  tag: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginRight: 8, borderWidth: 1 },
-  tagText: { fontSize: 12 },
+  label: { marginBottom: 8, fontWeight: 'bold' },
+  chip: { marginRight: 8 },
   row: { flexDirection: 'row', marginBottom: 16 },
-  input: { borderWidth: 1, padding: 10, borderRadius: 6, marginBottom: 16 },
-  applyBtn: { padding: 12, borderRadius: 6, alignItems: 'center', marginBottom: 8 },
-  resetBtn: { borderWidth: 1, padding: 12, borderRadius: 6, alignItems: 'center' },
+  input: { marginBottom: 10, backgroundColor: 'transparent' },
 });
 
 export default LawyersList;
