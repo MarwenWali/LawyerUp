@@ -146,6 +146,42 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// Update user profile
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { name, phone, bio } = req.body;
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || name.trim().length === 0 || name.length > 100) {
+        return res.status(400).json({ error: 'Name must be between 1 and 100 characters' });
+      }
+      user.name = name.trim();
+    }
+    if (phone !== undefined) {
+      if (typeof phone !== 'string' || phone.length > 30) {
+        return res.status(400).json({ error: 'Phone must be at most 30 characters' });
+      }
+      user.phone = phone;
+    }
+    if (bio !== undefined && user.role === 'lawyer') {
+      if (typeof bio !== 'string' || bio.length > 1000) {
+        return res.status(400).json({ error: 'Bio must be at most 1000 characters' });
+      }
+      user.bio = bio;
+    }
+
+    await user.save();
+    res.json({ message: 'Profile updated', user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Reject a lawyer
 app.post('/api/reject-lawyer/:id', async (req, res) => {
   try {
