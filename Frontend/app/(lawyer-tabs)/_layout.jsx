@@ -1,0 +1,80 @@
+import { isLiquidGlassAvailable } from "expo-glass-effect";
+import { Tabs } from "expo-router";
+import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
+import { BlurView } from "expo-blur";
+import { Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React from "react";
+import { useTheme } from "@/constants/useTheme";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+function NativeTabLayout() {
+  const { t } = useLanguage();
+  return (
+    <NativeTabs>
+      <NativeTabs.Trigger name="index">
+        <Icon sf={{ default: "house", selected: "house.fill" }} />
+        <Label>{t.home}</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="cases">
+        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
+        <Label>{t.cases}</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="requests">
+        <Icon sf={{ default: "envelope", selected: "envelope.fill" }} />
+        <Label>{t.requests || 'Requests'}</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="profile">
+        <Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
+        <Label>{t.profile}</Label>
+      </NativeTabs.Trigger>
+    </NativeTabs>
+  );
+}
+
+function ClassicTabLayout() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const isWeb = Platform.OS === "web";
+  const isIOS = Platform.OS === "ios";
+  const safeAreaInsets = useSafeAreaInsets();
+  const C = useTheme();
+  const { t } = useLanguage();
+
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: C.tint,
+        tabBarInactiveTintColor: C.tabIconDefault,
+        tabBarLabelStyle: { fontFamily: 'Inter_500Medium', fontSize: 11 },
+        tabBarStyle: {
+          position: "absolute",
+          backgroundColor: isIOS ? "transparent" : C.headerBg,
+          borderTopWidth: isWeb ? 1 : 0,
+          borderTopColor: C.border,
+          elevation: 0,
+          ...(isWeb ? { height: 84 } : {}),
+          ...(!isWeb ? { paddingBottom: safeAreaInsets.bottom } : {}),
+        },
+        tabBarBackground: () =>
+          isIOS ? (
+            <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          ) : isWeb ? (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.headerBg }]} />
+          ) : null,
+      }}
+    >
+      <Tabs.Screen name="index" options={{ title: t.home, tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} /> }} />
+      <Tabs.Screen name="cases" options={{ title: t.cases, tabBarIcon: ({ color, size }) => <Ionicons name="folder" size={size} color={color} /> }} />
+      <Tabs.Screen name="requests" options={{ title: t.requests || 'Requests', tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} /> }} />
+      <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
+    </Tabs>
+  );
+}
+
+export default function LawyerTabLayout() {
+  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
+  return <ClassicTabLayout />;
+}

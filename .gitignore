@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Logs and uploads
+*.log
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build / caches
+dist/
+build/
+web-build/
+.expo/
+.kotlin/
+.metro-health-check*
+*.tsbuildinfo
+
+# Expo / React Native (Frontend)
+expo-env.d.ts
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+/ios
+/android
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
