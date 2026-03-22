@@ -1,0 +1,226 @@
+import bcrypt from 'bcryptjs';
+import pool from '../config/database.js';
+
+export async function getMe(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT u.id, u.email, u.full_name AS name, u.phone_number, u.role, u.is_verified, u.status, u.created_at,
+              u.profile_photo_url,
+              lp.specialization, lp.bio, lp.experience_years, lp.rating,
+              lp.cases_handled, lp.is_available, lp.consultation_fee, lp.office_address, lp.bar_number
+       FROM users u
+       LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+       WHERE u.id = $1`,
+      [req.user.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: result.rows[0] });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+}
+
+export async function updateMe(req, res) {
+  try {
+    const { full_name, phone_number, bio, specialization, experience_years } = req.body;
+
+    const updates = [];
+    const params = [];
+    let idx = 1;
+    if (full_name !== undefined)   { updates.push(`full_name = $${idx++}`);    params.push(full_name); }
+    if (phone_number !== undefined) { updates.push(`phone_number = $${idx++}`); params.push(phone_number); }
+    if (updates.length > 0) {
+      updates.push(`updated_at = CURRENT_TIMESTAMP`);
+      params.push(req.user.id);
+      await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, params);
+    }
+
+    if (req.user.role === 'lawyer' && (bio !== undefined || specialization !== undefined || experience_years !== undefined)) {
+      const lpUpdates = [];
+      const lpParams = [];
+      let lpIdx = 1;
+      if (bio !== undefined)              { lpUpdates.push(`bio = $${lpIdx++}`);               lpParams.push(bio); }
+      if (specialization !== undefined)   { lpUpdates.push(`specialization = $${lpIdx++}`);   lpParams.push(specialization); }
+      if (experience_years !== undefined) { lpUpdates.push(`experience_years = $${lpIdx++}`); lpParams.push(experience_years); }
+      lpParams.push(req.user.id);
+      await pool.query(
+        `UPDATE lawyer_profiles SET ${lpUpdates.join(', ')} WHERE user_id = $${lpIdx}`,
+        lpParams
+      );
+    }
+
+    const result = await pool.query(
+      `SELECT u.id, u.email, u.full_name AS name, u.phone_number, u.role, u.is_verified, u.status,
+              u.profile_photo_url,
+              lp.specialization, lp.bio, lp.experience_years, lp.rating, lp.is_available
+       FROM users u
+       LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+       WHERE u.id = $1`,
+      [req.user.id]
+    );
+
+    res.json({ message: 'Profile updated successfully', user: result.rows[0] });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+}
+
+export async function changePassword(req, res) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Both currentPassword and newPassword are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    const r = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+    if (r.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const match = await bcrypt.compare(currentPassword, r.rows[0].password);
+    if (!match) return res.status(400).json({ error: 'Current password is incorrect' });
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [hashed, req.user.id]
+    );
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+}
+
+export async function uploadPhoto(req, res) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
+    const photoUrl = `/uploads/${req.file.filename}`;
+    await pool.query(
+      'UPDATE users SET profile_photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [photoUrl, req.user.id]
+    );
+    res.json({ message: 'Photo updated successfully', profile_photo_url: photoUrl });
+  } catch (error) {
+    console.error('Upload photo error:', error);
+    res.status(500).json({ error: 'Failed to upload photo' });
+  }
+}
+
+export async function getAllUsers(req, res) {
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id, u.email, u.full_name, u.phone_number, u.role, u.is_verified, u.created_at, u.updated_at,
+        lp.specialization, lp.experience_years, lp.rating, lp.cases_handled, lp.is_available, lp.diploma_url
+      FROM users u
+      LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+      ORDER BY u.created_at DESC
+    `);
+    res.json(result.rows.map(user => ({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      phone_number: user.phone_number,
+      role: user.role,
+      is_verified: user.is_verified,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      specialization: user.specialization,
+      experience_years: user.experience_years,
+      rating: user.rating,
+      cases_handled: user.cases_handled,
+      is_available: user.is_available,
+      diploma_url: user.diploma_url,
+    })));
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+}
+
+export async function getUserById(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT
+        u.id, u.email, u.full_name, u.phone_number, u.role, u.is_verified, u.created_at, u.updated_at,
+        lp.specialization, lp.experience_years, lp.rating, lp.cases_handled, lp.is_available, lp.diploma_url
+      FROM users u
+      LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+      WHERE u.id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const user = result.rows[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name,
+      phone_number: user.phone_number,
+      role: user.role,
+      is_verified: user.is_verified,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      specialization: user.specialization,
+      experience_years: user.experience_years,
+      rating: user.rating,
+      cases_handled: user.cases_handled,
+      is_available: user.is_available,
+      diploma_url: user.diploma_url,
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+}
+
+export async function updateUser(req, res) {
+  try {
+    const { id } = req.params;
+    const { full_name, phone_number, role, is_verified, specialization } = req.body;
+
+    const userUpdates = [];
+    const userParams = [];
+    let paramCount = 1;
+
+    if (full_name !== undefined)   { userUpdates.push(`full_name = $${paramCount++}`);    userParams.push(full_name); }
+    if (phone_number !== undefined) { userUpdates.push(`phone_number = $${paramCount++}`); userParams.push(phone_number); }
+    if (role !== undefined)         { userUpdates.push(`role = $${paramCount++}`);         userParams.push(role); }
+    if (is_verified !== undefined)  { userUpdates.push(`is_verified = $${paramCount++}`);  userParams.push(is_verified); }
+
+    if (userUpdates.length > 0) {
+      userUpdates.push(`updated_at = CURRENT_TIMESTAMP`);
+      userParams.push(id);
+      await pool.query(
+        `UPDATE users SET ${userUpdates.join(', ')} WHERE id = $${paramCount}`,
+        userParams
+      );
+    }
+
+    if (role === 'lawyer' && specialization !== undefined) {
+      await pool.query(
+        `UPDATE lawyer_profiles SET specialization = $1 WHERE user_id = $2`,
+        [specialization, id]
+      );
+    }
+
+    res.json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+}
+
+export async function deleteUser(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+}
