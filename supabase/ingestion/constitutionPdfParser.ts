@@ -206,28 +206,25 @@ function selectCanonicalArticleHeadings(
   candidates: { articleNumber: number; startIndex: number }[],
   maxArticleNumber: number
 ): { articleNumber: number; startIndex: number }[] {
-  // Keep first occurrence of each article number (prevents duplicates).
-  const firstByNumber = new Map<number, number>();
-  const picked: { articleNumber: number; startIndex: number }[] = [];
-
-  // Candidates are already in document order because we scan with a global regex.
+  const candidatesByNumber = new Map<number, { articleNumber: number; startIndex: number }[]>();
   for (const c of candidates) {
     if (c.articleNumber < 1 || c.articleNumber > maxArticleNumber) continue;
-    if (firstByNumber.has(c.articleNumber)) continue;
-    firstByNumber.set(c.articleNumber, c.startIndex);
-    picked.push({ articleNumber: c.articleNumber, startIndex: c.startIndex });
+    const list = candidatesByNumber.get(c.articleNumber) ?? [];
+    list.push(c);
+    candidatesByNumber.set(c.articleNumber, list);
   }
 
-  // Now build canonical list 1..maxArticleNumber in increasing order.
+  // Choose, for each n=1..max, the earliest candidate for article n that comes
+  // strictly after the previously selected article heading.
   const canonical: { articleNumber: number; startIndex: number }[] = [];
   let lastIndex = -1;
+
   for (let n = 1; n <= maxArticleNumber; n += 1) {
-    const idx = firstByNumber.get(n);
-    if (idx === undefined) continue;
-    // Guard against any weird re-ordering if extraction inserts headings strangely.
-    if (idx <= lastIndex) continue;
-    canonical.push({ articleNumber: n, startIndex: idx });
-    lastIndex = idx;
+    const list = candidatesByNumber.get(n) ?? [];
+    const next = list.find((c) => c.startIndex > lastIndex);
+    if (!next) continue;
+    canonical.push({ articleNumber: n, startIndex: next.startIndex });
+    lastIndex = next.startIndex;
   }
 
   return canonical;
