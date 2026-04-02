@@ -38,3 +38,10 @@ expo-env.d.ts
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# AI artifacts / local environments
+ai_iss/mistral_env/
+ai_iss/models/
+ai_iss/legal-model/
+ai_iss/__pycache__/
+ai_iss/**/*.pyc

@@ -1,0 +1,388 @@
+[
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "chnowa 7a9i fil travail fi tounes?",
+    "output": "في تونس، عندك الحق في عقد عمل واضح، أجر عادل، وساعات عمل قانونية، مع حماية من الطرد التعسفي."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "Quels sont mes droits si je suis licencié en Tunisie?",
+    "output": "En Tunisie, si vous êtes licencié sans raison valable, vous pouvez demander une indemnité et contester la décision devant le tribunal du travail."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "What is the minimum wage in Tunisia?",
+    "output": "The minimum wage in Tunisia depends on the sector, but it is regulated by the government and updated periodically."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "najem n3amel contrat travail sans avocat?",
+    "output": "نعم، يمكن عمل عقد عمل بدون محامي، لكن من الأفضل مراجعته لحماية حقوقك."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "Is overtime legal in Tunisia?",
+    "output": "Yes, overtime is legal in Tunisia but it must be paid with additional compensation according to labor law."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "شنية حقوقي كي نخدم بلا عقد؟",
+    "output": "حتى بدون عقد مكتوب، عندك حقوق في الأجر والحماية القانونية إذا ثبت وجود علاقة عمل."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "Can my employer fire me without notice in Tunisia?",
+    "output": "No, in most cases the employer must give notice or compensation unless there is serious misconduct."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "Quels sont les congés payés en Tunisie?",
+    "output": "En Tunisie, les salariés ont droit à des congés payés annuels, généralement calculés selon l’ancienneté."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "nheb na3ref chnowa 7a9i fil retraite",
+    "output": "في تونس، التقاعد يعتمد على عدد سنوات العمل والمساهمات في الضمان الاجتماعي."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "Do I need a written contract in Tunisia?",
+    "output": "A written contract is not always mandatory, but it is highly recommended to protect both employee and employer."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "شنية العقوبة إذا خالفت قانون الشغل؟",
+    "output": "مخالفة قانون الشغل في تونس يمكن أن تؤدي إلى غرامات أو نزاعات قضائية حسب نوع المخالفة."
+  },
+  {
+    "instruction": "Answer in the same language as the user",
+    "input": "What happens if I resign from my job in Tunisia?",
+    "output": "If you resign, you usually need to respect the notice period defined in your contract or labor law."
+  }
+  ,
+  {"instruction":"Answer in the same language as the user","input":"chnowa 7a9i fil travail fi tounes?","output":"في تونس، العامل عنده الحق في أجر عادل، ساعات عمل قانونية، وحماية من الطرد التعسفي."},
+  {"instruction":"Answer in the same language as the user","input":"Quels sont mes droits au travail en Tunisie?","output":"En Tunisie, les travailleurs ont droit à un salaire équitable, des conditions de travail sûres et une protection contre le licenciement abusif."},
+  {"instruction":"Answer in the same language as the user","input":"What are my labor rights in Tunisia?","output":"You have the right to fair pay, regulated working hours, and protection against unfair dismissal."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem na3mel contrat sans avocat?","output":"نعم، يمكن عمل عقد عمل بدون محامي لكن من الأفضل مراجعته لحماية حقوقك."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je travailler sans contrat?","output":"Oui, mais il est fortement recommandé d'avoir un contrat écrit pour protéger vos droits."},
+  {"instruction":"Answer in the same language as the user","input":"Can I work without a contract?","output":"Yes, but it is strongly recommended to have a written contract for legal protection."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية حقوقي إذا تسرحت من الخدمة؟","output":"عندك الحق في تعويض إذا كان الطرد بدون سبب قانوني ويمكنك الطعن في المحكمة."},
+  {"instruction":"Answer in the same language as the user","input":"Que faire en cas de licenciement abusif?","output":"Vous pouvez contester le licenciement devant le tribunal et demander une compensation."},
+  {"instruction":"Answer in the same language as the user","input":"What happens if I get fired unfairly?","output":"You can challenge unfair dismissal in court and request compensation."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem na5ou overtime?","output":"نعم، العمل الإضافي قانوني ويجب أن يُدفع بأجر إضافي."},
+  {"instruction":"Answer in the same language as the user","input":"Les heures supplémentaires sont-elles payées?","output":"Oui, les heures supplémentaires doivent être payées avec une majoration."},
+  {"instruction":"Answer in the same language as the user","input":"Is overtime paid in Tunisia?","output":"Yes, overtime must be paid with additional compensation."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية congé payé?","output":"الإجازة المدفوعة هي حق للعامل حسب سنوات الخدمة."},
+  {"instruction":"Answer in the same language as the user","input":"Quels sont mes congés payés?","output":"Les congés payés dépendent de l'ancienneté du salarié."},
+  {"instruction":"Answer in the same language as the user","input":"What is paid leave?","output":"Paid leave is annual vacation time granted based on employment duration."},
+
+  {"instruction":"Answer in the same language as the user","input":"nheb na3ref chnowa retraite","output":"التقاعد يعتمد على عدد سنوات العمل والمساهمات في الضمان الاجتماعي."},
+  {"instruction":"Answer in the same language as the user","input":"Comment fonctionne la retraite en Tunisie?","output":"La retraite dépend des contributions à la sécurité sociale et des années de travail."},
+  {"instruction":"Answer in the same language as the user","input":"How does retirement work in Tunisia?","output":"Retirement depends on years of contribution to social security."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem nst9il w chnowa يصير?","output":"يمكنك الاستقالة لكن يجب احترام مدة الإعلام حسب العقد أو القانون."},
+  {"instruction":"Answer in the same language as the user","input":"Que se passe-t-il si je démissionne?","output":"Vous devez respecter le préavis prévu dans votre contrat ou la loi."},
+  {"instruction":"Answer in the same language as the user","input":"What happens if I resign?","output":"You must respect the notice period in your contract or labor law."},
+
+  {"instruction":"Answer in the same language as the user","input":"هل العقد الشفهي قانوني؟","output":"نعم لكنه صعب الإثبات في حالة النزاع."},
+  {"instruction":"Answer in the same language as the user","input":"Le contrat oral est-il valide?","output":"Oui, mais il est difficile à prouver en cas de litige."},
+  {"instruction":"Answer in the same language as the user","input":"Is an oral contract valid?","output":"Yes, but it is difficult to prove in disputes."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية حقوق العامل بلا عقد؟","output":"حتى بدون عقد مكتوب، للعامل حقوق في الأجر والحماية إذا ثبت العمل."},
+  {"instruction":"Answer in the same language as the user","input":"Quels sont les droits sans contrat?","output":"Même sans contrat écrit, le salarié a des droits s'il peut prouver le travail."},
+  {"instruction":"Answer in the same language as the user","input":"What are rights without a contract?","output":"Even without a written contract, workers still have rights if employment is proven."}
+,
+  {"instruction":"Answer in the same language as the user","input":"chnowa يصير إذا ما خلصنيش خدمتي؟","output":"إذا صاحب العمل ما خلصكش، تنجم تقدم شكوى وتطالب بحقوقك قانونياً."},
+  {"instruction":"Answer in the same language as the user","input":"What if my employer doesn't pay me?","output":"You can file a complaint with labor authorities and claim your unpaid wages."},
+  {"instruction":"Answer in the same language as the user","input":"Que faire si mon employeur ne me paie pas?","output":"Vous pouvez déposer une plainte et réclamer vos salaires impayés."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem na5ou droit mta3 chômage?","output":"نعم، يمكنك الحصول على تعويض بطالة حسب شروط الضمان الاجتماعي."},
+  {"instruction":"Answer in the same language as the user","input":"Do I get unemployment benefits in Tunisia?","output":"Yes, under certain conditions you can receive unemployment compensation."},
+  {"instruction":"Answer in the same language as the user","input":"Est-ce que j'ai droit au chômage?","output":"Oui, sous certaines conditions de la sécurité sociale."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية مدة العمل القانونية؟","output":"مدة العمل عادة 48 ساعة في الأسبوع حسب القانون التونسي."},
+  {"instruction":"Answer in the same language as the user","input":"What are legal working hours in Tunisia?","output":"The standard working time is about 48 hours per week."},
+  {"instruction":"Answer in the same language as the user","input":"Quelle est la durée légale du travail?","output":"En général, 48 heures par semaine."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem n5dm overtime sans accord?","output":"لا، العمل الإضافي يجب أن يكون بموافقة أو حسب القانون."},
+  {"instruction":"Answer in the same language as the user","input":"Can I do overtime without agreement?","output":"No, overtime must follow legal rules or employer agreement."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je faire des heures supplémentaires sans accord?","output":"Non, cela doit être encadré légalement."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية حقوق المرأة في الخدمة؟","output":"المرأة عندها نفس حقوق الرجل في العمل والأجر والحماية."},
+  {"instruction":"Answer in the same language as the user","input":"Women labor rights in Tunisia?","output":"Women have equal rights to men in salary, work, and protection."},
+  {"instruction":"Answer in the same language as the user","input":"Quels sont les droits des femmes au travail?","output":"Les femmes ont les mêmes droits que les hommes."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem n5dm بلا CNSS?","output":"لا ينصح بذلك لأن CNSS تحمي حقوقك الاجتماعية والصحية."},
+  {"instruction":"Answer in the same language as the user","input":"Can I work without social security?","output":"Yes, but it is not recommended as you lose social protection."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je travailler sans CNSS?","output":"Oui, mais sans protection sociale."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية CNSS؟","output":"CNSS هي الضمان الاجتماعي في تونس وتغطي التقاعد والتأمين الصحي."},
+  {"instruction":"Answer in the same language as the user","input":"What is CNSS?","output":"CNSS is Tunisia's social security system for pensions and healthcare."},
+  {"instruction":"Answer in the same language as the user","input":"Qu'est-ce que la CNSS?","output":"C'est la sécurité sociale en Tunisie."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نبدل خدمة بلا مشاكل؟","output":"نعم لكن يجب احترام العقد ومدة الإعلام."},
+  {"instruction":"Answer in the same language as the user","input":"Can I change jobs easily in Tunisia?","output":"Yes, but you must respect notice periods in your contract."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je changer de travail facilement?","output":"Oui, en respectant le préavis."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية عقوبة العمل غير المصرح به؟","output":"يمكن أن تكون هناك غرامات ومشاكل قانونية."},
+  {"instruction":"Answer in the same language as the user","input":"What is illegal work in Tunisia?","output":"Illegal work can lead to fines and legal penalties."},
+  {"instruction":"Answer in the same language as the user","input":"Quelle est la sanction du travail non déclaré?","output":"Amendes et sanctions légales possibles."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem n7ot plainte contre boss?","output":"نعم يمكنك تقديم شكوى إلى تفقدية الشغل."},
+  {"instruction":"Answer in the same language as the user","input":"Can I complain against my employer?","output":"Yes, you can report them to labor inspection."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je porter plainte contre mon employeur?","output":"Oui, auprès de l'inspection du travail."}
+,
+  {"instruction":"Answer in the same language as the user","input":"najem نمشي للمحكمة كان boss ظلمني؟","output":"نعم، يمكنك اللجوء إلى المحكمة أو تفقدية الشغل إذا تعرضت لظلم في العمل."},
+  {"instruction":"Answer in the same language as the user","input":"Can I sue my employer in Tunisia?","output":"Yes, you can take legal action if your employer violates your rights."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je aller au tribunal contre mon employeur?","output":"Oui, en cas de violation de vos droits."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا العقد فيه مشاكل؟","output":"يمكنك الطعن أو طلب تعديل العقد إذا فيه شروط غير قانونية."},
+  {"instruction":"Answer in the same language as the user","input":"What if my contract is unfair?","output":"You can challenge or renegotiate unfair contract terms."},
+  {"instruction":"Answer in the same language as the user","input":"Que faire si le contrat est injuste?","output":"Vous pouvez contester certaines clauses du contrat."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نبدل شروط العقد؟","output":"نعم إذا اتفقت مع صاحب العمل يمكن تغيير العقد."},
+  {"instruction":"Answer in the same language as the user","input":"Can contract terms be changed?","output":"Yes, if both parties agree."},
+  {"instruction":"Answer in the same language as the user","input":"Peut-on modifier un contrat de travail?","output":"Oui, avec accord des deux parties."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية حقوقي إذا الشركة سكرت؟","output":"يمكنك المطالبة بالتعويض حسب القوانين والضمان الاجتماعي."},
+  {"instruction":"Answer in the same language as the user","input":"What if my company closes?","output":"You may be entitled to compensation depending on your situation."},
+  {"instruction":"Answer in the same language as the user","input":"Que faire si l'entreprise ferme?","output":"Vous pouvez demander des indemnités."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نرفض خدمة خطيرة؟","output":"نعم عندك الحق ترفض عمل يهدد سلامتك."},
+  {"instruction":"Answer in the same language as the user","input":"Can I refuse dangerous work?","output":"Yes, you have the right to refuse unsafe work."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je refuser un travail dangereux?","output":"Oui, pour des raisons de sécurité."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية تفقدية الشغل؟","output":"هي مؤسسة تراقب احترام قوانين الشغل وتحمي العمال."},
+  {"instruction":"Answer in the same language as the user","input":"What is labor inspection?","output":"It is a government body that ensures labor law compliance."},
+  {"instruction":"Answer in the same language as the user","input":"Qu'est-ce que l'inspection du travail?","output":"Une autorité qui contrôle le respect du droit du travail."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem ناخذ avocat؟","output":"نعم يمكنك الاستعانة بمحامي للدفاع عن حقوقك."},
+  {"instruction":"Answer in the same language as the user","input":"Do I need a lawyer for labor issues?","output":"A lawyer is recommended for complex labor disputes."},
+  {"instruction":"Answer in the same language as the user","input":"Ai-je besoin d'un avocat?","output":"Oui, surtout pour les litiges importants."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير في المحكمة؟","output":"القاضي ينظر في الأدلة ويصدر حكم حسب القانون."},
+  {"instruction":"Answer in the same language as the user","input":"What happens in labor court?","output":"The judge reviews evidence and issues a legal decision."},
+  {"instruction":"Answer in the same language as the user","input":"Que se passe-t-il au tribunal?","output":"Le juge examine les preuves et rend une décision."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نأجل المحكمة؟","output":"يمكن طلب تأجيل في بعض الحالات القانونية."},
+  {"instruction":"Answer in the same language as the user","input":"Can court hearings be postponed?","output":"Yes, under certain legal conditions."},
+  {"instruction":"Answer in the same language as the user","input":"Peut-on reporter une audience?","output":"Oui, dans certains cas."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية الإثبات في النزاع؟","output":"الإثبات يمكن يكون عقد، شهود، أو مراسلات عمل."},
+  {"instruction":"Answer in the same language as the user","input":"What is evidence in labor disputes?","output":"Contracts, witnesses, and documents can be used as evidence."},
+  {"instruction":"Answer in the same language as the user","input":"Quelles preuves sont acceptées?","output":"Contrats, témoins et documents."}
+,
+  {"instruction":"Answer in the same language as the user","input":"boss يسبني في الخدمة، شنو نعمل؟","output":"يمكنك تقديم شكوى لتفقدية الشغل لأن الإهانة في مكان العمل غير قانونية."},
+  {"instruction":"Answer in the same language as the user","input":"My boss insults me at work, what can I do?","output":"You can report workplace harassment to labor authorities."},
+  {"instruction":"Answer in the same language as the user","input":"Mon patron m'insulte au travail, que faire?","output":"Vous pouvez déposer une plainte pour harcèlement."},
+
+  {"instruction":"Answer in the same language as the user","input":"ما خلصونيش overtime، شنوة نعمل؟","output":"يمكنك المطالبة بالأجر الإضافي وتقديم شكوى."},
+  {"instruction":"Answer in the same language as the user","input":"My overtime was not paid, what should I do?","output":"You can claim unpaid overtime through labor inspection."},
+  {"instruction":"Answer in the same language as the user","input":"Les heures supplémentaires ne sont pas payées, que faire?","output":"Vous pouvez réclamer vos droits légalement."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem يطردوني بدون سبب؟","output":"لا، الطرد بدون سبب قانوني يمكن الطعن فيه."},
+  {"instruction":"Answer in the same language as the user","input":"Can I be fired without reason?","output":"No, you can challenge unfair dismissal."},
+  {"instruction":"Answer in the same language as the user","input":"Peut-on me licencier sans raison?","output":"Non, vous pouvez contester le licenciement."},
+
+  {"instruction":"Answer in the same language as the user","input":"boss ما يحبش يصرح بيا في CNSS","output":"هذا مخالف للقانون ويمكن تقديم شكوى."},
+  {"instruction":"Answer in the same language as the user","input":"My employer doesn't register me in CNSS","output":"This is illegal and can be reported."},
+  {"instruction":"Answer in the same language as the user","input":"Mon employeur ne me déclare pas à la CNSS","output":"C'est illégal et vous pouvez porter plainte."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا الخدمة بدون CNSS؟","output":"تفقد الحماية الاجتماعية مثل التقاعد والتأمين."},
+  {"instruction":"Answer in the same language as the user","input":"What if I work without CNSS?","output":"You lose social protection benefits."},
+  {"instruction":"Answer in the same language as the user","input":"Que se passe-t-il sans CNSS?","output":"Vous perdez la protection sociale."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نغيب على الخدمة؟","output":"الغياب المتكرر بدون سبب يمكن أن يؤدي إلى طرد."},
+  {"instruction":"Answer in the same language as the user","input":"Can I be absent from work?","output":"Repeated unjustified absence can lead to dismissal."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je m'absenter du travail?","output":"Les absences injustifiées peuvent être sanctionnées."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا ما عملتش notice؟","output":"يمكن خصم من الأجر أو مشاكل قانونية حسب العقد."},
+  {"instruction":"Answer in the same language as the user","input":"What if I don't give notice?","output":"You may face penalties depending on your contract."},
+  {"instruction":"Answer in the same language as the user","input":"Que se passe-t-il sans préavis?","output":"Des sanctions peuvent s'appliquer."},
+
+  {"instruction":"Answer in the same language as the user","input":"boss يبدل شروط الخدمة فجأة","output":"لا يمكن تغيير العقد بدون موافقتك."},
+  {"instruction":"Answer in the same language as the user","input":"Employer changes contract suddenly","output":"Changes require employee agreement."},
+  {"instruction":"Answer in the same language as the user","input":"Modification du contrat sans accord","output":"Impossible sans accord du salarié."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نطلب زيادة؟","output":"نعم يمكنك طلب زيادة حسب الأداء أو العقد."},
+  {"instruction":"Answer in the same language as the user","input":"Can I ask for a raise?","output":"Yes, you can request a salary increase."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je demander une augmentation?","output":"Oui, selon performance ou accord."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية حقوقي في accident travail؟","output":"عندك حق في علاج وتعويض من CNSS."},
+  {"instruction":"Answer in the same language as the user","input":"Work accident rights in Tunisia?","output":"You are entitled to medical care and compensation."},
+  {"instruction":"Answer in the same language as the user","input":"Droits en cas d'accident de travail","output":"Soins médicaux et indemnisation."}
+,
+  {"instruction":"Answer in the same language as the user","input":"najem نرفض contract فيه شروط ظالمة؟","output":"نعم يمكنك رفض العقد أو طلب تعديل الشروط قبل التوقيع."},
+  {"instruction":"Answer in the same language as the user","input":"Can I refuse an unfair contract?","output":"Yes, you can refuse or negotiate unfair terms before signing."},
+  {"instruction":"Answer in the same language as the user","input":"Puis-je refuser un contrat injuste?","output":"Oui, avant signature vous pouvez refuser ou négocier."},
+
+  {"instruction":"Answer in the same language as the user","input":"boss يضغط عليا باش نخدم ساعات زيادة","output":"الضغط غير القانوني للعمل الإجباري يمكن تقديم شكوى ضده."},
+  {"instruction":"Answer in the same language as the user","input":"Employer forces me to work overtime","output":"Forced overtime without agreement can be reported."},
+  {"instruction":"Answer in the same language as the user","input":"Pression pour faire des heures supplémentaires","output":"Cela peut être signalé à l'inspection du travail."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem ناخذ عطلة مرضية؟","output":"نعم عندك الحق في عطلة مرضية بشهادة طبية."},
+  {"instruction":"Answer in the same language as the user","input":"Can I take sick leave?","output":"Yes, with a medical certificate you can take sick leave."},
+  {"instruction":"Answer in the same language as the user","input":"Congé maladie en Tunisie","output":"Oui, avec certificat médical."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا سرقت الشركة فلوسي؟","output":"يمكنك تقديم شكوى ومطالبة بحقوقك قانونياً."},
+  {"instruction":"Answer in the same language as the user","input":"What if my employer steals money?","output":"You can file a legal complaint for fraud."},
+  {"instruction":"Answer in the same language as the user","input":"Si l'employeur vole de l'argent","output":"Vous pouvez porter plainte."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نخدم part-time في تونس؟","output":"نعم العمل الجزئي قانوني بشروط العقد."},
+  {"instruction":"Answer in the same language as the user","input":"Can I work part-time?","output":"Yes, part-time work is legal under contract terms."},
+  {"instruction":"Answer in the same language as the user","input":"Travail à temps partiel","output":"Oui, c'est légal."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية عقوبة التحرش في العمل؟","output":"التحرش يعاقب عليه القانون ويمكن الطرد أو عقوبة قانونية."},
+  {"instruction":"Answer in the same language as the user","input":"Workplace harassment penalty?","output":"It is punishable by law and may lead to dismissal or legal action."},
+  {"instruction":"Answer in the same language as the user","input":"Sanction du harcèlement au travail","output":"Sanctions disciplinaires et judiciaires."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نبدل CNSS؟","output":"لا يمكنك تغيير CNSS لكن يمكنك تحديث بياناتك."},
+  {"instruction":"Answer in the same language as the user","input":"Can I change CNSS?","output":"You cannot change it, but you can update your records."},
+  {"instruction":"Answer in the same language as the user","input":"Changer la CNSS","output":"Non, mais mise à jour possible."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا ما عنديش CNSS سنوات؟","output":"يمكن أن ينقص التقاعد أو الحقوق الاجتماعية."},
+  {"instruction":"Answer in the same language as the user","input":"Missing CNSS contributions","output":"It may reduce pension benefits."},
+  {"instruction":"Answer in the same language as the user","input":"Absence de cotisation CNSS","output":"Réduction des droits sociaux."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem نوقف الخدمة فجأة؟","output":"يجب احترام العقد وإلا يمكن مشاكل قانونية."},
+  {"instruction":"Answer in the same language as the user","input":"Can I quit immediately?","output":"You must respect notice period to avoid penalties."},
+  {"instruction":"Answer in the same language as the user","input":"Quitter le travail immédiatement","output":"Non recommandé sans préavis."},
+
+  {"instruction":"Answer in the same language as the user","input":"boss يهددني بالطرد","output":"التهديد غير قانوني ويمكن تقديم شكوى."},
+  {"instruction":"Answer in the same language as the user","input":"My boss threatens to fire me","output":"You can report workplace intimidation."},
+  {"instruction":"Answer in the same language as the user","input":"Menaces de licenciement","output":"Peut être signalé légalement."},
+
+  {"instruction":"Answer in the same language as the user","input":"شنية يصير إذا الشركة مفلسة؟","output":"يمكنك طلب تعويض حسب حقوق العمال."},
+  {"instruction":"Answer in the same language as the user","input":"What if company goes bankrupt?","output":"Employees may be entitled to compensation."},
+  {"instruction":"Answer in the same language as the user","input":"Faillite de l'entreprise","output":"Indemnisation possible."},
+
+  {"instruction":"Answer in the same language as the user","input":"najem ناخذ حقوقي الكل حتى بعد الاستقالة؟","output":"يمكنك المطالبة بحقوقك المستحقة فقط."},
+  {"instruction":"Answer in the same language as the user","input":"Do I get rights after resignation?","output":"You only receive rights already earned."},
+  {"instruction":"Answer in the same language as the user","input":"Droits après démission","output":"Uniquement les droits acquis."}
+  ,
+{"input":"chneya nafeka","output":"ما هي حالتك أو ماذا يحدث معك"},
+{"input":"labes?","output":"هل أنت بخير؟"},
+{"input":"kifeh ahwalek","output":"كيف حالك؟"},
+{"input":"chnowa esmou hadha","output":"ما اسم هذا؟"},
+{"input":"win tansa","output":"أين أنت؟"},
+{"input":"3andek flous?","output":"هل لديك مال؟"},
+{"input":"nheb nom","output":"أريد النوم"},
+{"input":"ma fhemtch","output":"لم أفهم"},
+{"input":"a3tini chwaya waqt","output":"أعطني بعض الوقت"},
+{"input":"chniya hedhi","output":"ما هذا؟"},
+
+{"input":"win temchi tawa","output":"أين تذهب الآن؟"},
+{"input":"3lech sakt","output":"لماذا أنت صامت؟"},
+{"input":"nheb nsefer","output":"أريد السفر"},
+{"input":"3andi mouchkla","output":"لدي مشكلة"},
+{"input":"sahbi","output":"يا صديقي"},
+{"input":"ya weldi","output":"يا بني / يا ولدي"},
+{"input":"brabi aawni","output":"من فضلك ساعدني"},
+{"input":"nheb n3ref","output":"أريد أن أعرف"},
+{"input":"chniya ra2yek","output":"ما رأيك؟"},
+{"input":"tawa fehmt","output":"الآن فهمت"},
+
+{"input":"3lech ma jawbtech","output":"لماذا لم تجب؟"},
+{"input":"ena ta3ban","output":"أنا متعب"},
+{"input":"nheb nرتاح","output":"أريد أن أرتاح"},
+{"input":"chniya hal el moshkla","output":"ما هي المشكلة؟"},
+{"input":"win saret hadha","output":"أين حدث هذا؟"},
+{"input":"chouf","output":"انظر"},
+{"input":"asma3ni","output":"اسمعني"},
+{"input":"sabr","output":"الصبر"},
+{"input":"3aych khouya","output":"شكراً أخي"},
+{"input":"mabrouk","output":"مبروك"}
+,
+{"input":"ena ferhan","output":"أنا سعيد"},
+{"input":"ena hazin","output":"أنا حزين"},
+{"input":"3andi stress","output":"لدي ضغط نفسي"},
+{"input":"nheb nرتاح شوية","output":"أريد أن أرتاح قليلاً"},
+{"input":"rani mta3ab barcha","output":"أنا متعب جداً"},
+{"input":"mouch normal","output":"هذا غير طبيعي"},
+{"input":"kol chay bikhir","output":"كل شيء بخير"},
+{"input":"nheb nsafar برا","output":"أريد السفر إلى الخارج"},
+{"input":"3andi exam ghodwa","output":"لدي امتحان غداً"},
+{"input":"rani khayef","output":"أنا خائف"},
+
+{"input":"ma andich thik fi hadha","output":"لا أثق في هذا"},
+{"input":"nheb nbadel hathi","output":"أريد تغيير هذا"},
+{"input":"chniya solution","output":"ما هو الحل؟"},
+{"input":"3awni barka","output":"ساعدني فقط"},
+{"input":"ma nجمش نفهم","output":"لا أستطيع الفهم"},
+{"input":"kol chay mrigel","output":"كل شيء جيد"},
+{"input":"rani mabsout","output":"أنا مرتاح"},
+{"input":"nheb nخرج","output":"أريد الخروج"},
+{"input":"win temchi","output":"أين تذهب؟"},
+{"input":"3lech hakka","output":"لماذا هكذا؟"},
+
+{"input":"sahbi aatini rayek","output":"صديقي أعطني رأيك"},
+{"input":"nheb nbadl khdema","output":"أريد تغيير العمل"},
+{"input":"ma andich waqt","output":"ليس لدي وقت"},
+{"input":"chniya na3mel","output":"ماذا أفعل؟"},
+{"input":"rani ta3ban barcha","output":"أنا متعب جداً"},
+{"input":"nheb nرتاح fil dar","output":"أريد الراحة في المنزل"},
+{"input":"kol chay mouch sahl","output":"كل شيء ليس سهلاً"},
+{"input":"3andi problem kbir","output":"لدي مشكلة كبيرة"},
+{"input":"nheb n3ich","output":"أريد أن أعيش"},
+{"input":"ya rabbi","output":"يا رب"}
+,
+{"input":"winek tawa","output":"أين أنت الآن؟"},
+{"input":"chniya sayer","output":"ماذا يحدث؟"},
+{"input":"3lech taamel haka","output":"لماذا تفعل هذا؟"},
+{"input":"nheb neselk sou2al","output":"أريد أن أسألك سؤال"},
+{"input":"kol chay mrigel 3andek","output":"هل كل شيء جيد عندك؟"},
+{"input":"3andi haja nheb nkoulha","output":"لدي شيء أريد قوله"},
+{"input":"choufni chwaya","output":"انظر إلي قليلاً"},
+{"input":"ma tensach","output":"لا تنسَ"},
+{"input":"hani jay","output":"أنا قادم"},
+{"input":"nheb n3awd","output":"أريد الإعادة"},
+
+{"input":"chniya hadha bethabet","output":"ما هذا بالضبط؟"},
+{"input":"nheb nfhmek","output":"أريد أن أفهمك"},
+{"input":"ma fhemtch mlih","output":"لم أفهم جيداً"},
+{"input":"3awed a3tini","output":"أعد إعطائي"},
+{"input":"nheb nbadl rayi","output":"أريد تغيير رأيي"},
+{"input":"rani ma3andich fikra","output":"ليس لدي فكرة"},
+{"input":"chniya l7al","output":"ما الحل؟"},
+{"input":"3lech daiman haka","output":"لماذا دائماً هكذا؟"},
+{"input":"nheb n3ich mlih","output":"أريد أن أعيش بشكل جيد"},
+{"input":"ma nجمش نستنا","output":"لا أستطيع الانتظار"},
+
+{"input":"kol chay yetsir b sura","output":"كل شيء يحدث بسرعة"},
+{"input":"3andi mouchkla kima dima","output":"لدي مشكلة كالمعتاد"},
+{"input":"rani ma nرتاحش","output":"أنا لا أرتاح"},
+{"input":"nheb nsawer rouhi","output":"أريد تصوير نفسي"},
+{"input":"chniya t7eb","output":"ماذا تريد؟"},
+{"input":"nheb nbadl telifoun","output":"أريد تغيير الهاتف"},
+{"input":"3lech tghib","output":"لماذا تختفي؟"},
+{"input":"rani fi tariq","output":"أنا في الطريق"},
+{"input":"nheb n9ra","output":"أريد أن أدرس"},
+{"input":"ma andich motivation","output":"ليس لدي دافع"},
+
+{"input":"nheb nنجح","output":"أريد النجاح"},
+{"input":"rani na3mel fi moshkla","output":"أنا في مشكلة"},
+{"input":"chouf chwaya","output":"انظر قليلاً"},
+{"input":"3lech tsakt","output":"لماذا تصمت؟"},
+{"input":"nheb nbadl hayati","output":"أريد تغيير حياتي"},
+{"input":"kol chay ghali","output":"كل شيء غالي"},
+{"input":"ma andich flous kfiya","output":"ليس لدي مال كافٍ"},
+{"input":"nheb nخرج m3ak","output":"أريد الخروج معك"},
+{"input":"rani mabsout bik","output":"أنا سعيد بك"},
+{"input":"3lech t9olli haka","output":"لماذا تقول لي هذا؟"},
+
+{"input":"nheb nsawer video","output":"أريد تصوير فيديو"},
+{"input":"chniya tsir fi hadha","output":"ماذا يحدث في هذا؟"},
+{"input":"rani mta3ab bzf","output":"أنا متعب جداً"},
+{"input":"nheb nرتاح chwaya","output":"أريد الراحة قليلاً"},
+{"input":"3andi sujet kbir","output":"لدي موضوع كبير"},
+{"input":"ma fhemtch zeda","output":"لم أفهم أيضاً"},
+{"input":"rani n7eb nbadl","output":"أريد التغيير"},
+{"input":"nheb n3rf akthar","output":"أريد أن أعرف أكثر"},
+{"input":"chniya rayek enti","output":"ما رأيك أنت؟"},
+{"input":"3lech ma jeytch","output":"لماذا لم تأتِ؟"}
+
+]
