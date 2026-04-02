@@ -193,29 +193,36 @@ export default function ChatPage() {
       } catch {}
     }
 
-    try {
-      const payload = await chatApi.askAssistant(activeSession.id, text.trim());
-      const aiMsg = payload?.aiMessage || {
-        id: (Date.now() + 1).toString(),
-        content: 'AI assistant is temporarily unavailable. Please try again.',
-        sender: 'ai',
-        created_at: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, aiMsg]);
+    setTimeout(async () => {
+      try {
+        const data = await chatApi.ask(activeSession.id, text.trim());
+        const aiMsg = data?.aiMessage;
 
-      const data = await chatApi.getSessions();
-      setSessions(data.sessions);
-    } catch (e) {
-      console.error('askAssistant:', e);
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(),
-        sender: 'ai',
-        content: e?.message || 'AI assistant is temporarily unavailable. Please try again.',
-        created_at: new Date().toISOString(),
-      }]);
-    } finally {
-      setIsTyping(false);
-    }
+        if (aiMsg?.id && aiMsg?.content) {
+          setMessages(prev => [
+            ...prev.filter((m) => m.id !== userMsg.id),
+            data.userMessage,
+            aiMsg,
+          ]);
+        } else {
+          throw new Error('Invalid AI response payload');
+        }
+
+        const sessionsData = await chatApi.getSessions();
+        setSessions(sessionsData.sessions);
+      } catch (e) {
+        console.error('chat ask:', e);
+        const fallback = {
+          id: (Date.now() + 1).toString(),
+          content: 'I could not reach the AI service right now. Please try again in a moment.',
+          sender: 'ai',
+          created_at: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, fallback]);
+      } finally {
+        setIsTyping(false);
+      }
+    }, 500);
   }, [messages, isTyping, activeSession]);
 
   const showSuggestions = !messages.some(m => m.sender === 'user') && !isTyping;
