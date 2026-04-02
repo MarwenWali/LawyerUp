@@ -15,23 +15,6 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { AI_SUGGESTED_QUESTIONS } from '@/constants/mockData';
 import { chatApi } from '@/services/api';
 
-function generateAIResponse(question) {
-  const q = question.toLowerCase();
-  if (q.includes('tenant') || q.includes('rent')) {
-    return 'Under Tunisian law, tenant rights are governed by Law No. 77-37 of 1977. Key protections include:\n\n• Right to a written lease agreement\n• Protection against arbitrary eviction\n• Right to maintenance and repairs\n• Regulated rent increases\n\nI recommend consulting with a property law specialist for your specific situation. Would you like me to connect you with one?';
-  }
-  if (q.includes('business') || q.includes('register') || q.includes('company')) {
-    return 'To register a business in Tunisia, you need to follow the Code des Sociétés Commerciales. The process typically involves:\n\n• Choosing a legal structure (SARL, SA, etc.)\n• Registering with the RNE (Registre National des Entreprises)\n• Obtaining a tax identification number\n• Opening a business bank account\n\nWould you like to speak with a commercial law attorney?';
-  }
-  if (q.includes('divorce')) {
-    return 'Divorce in Tunisia is governed by the Personal Status Code (Majallat al-Ahwal al-Shakhsiyyah). Key points:\n\n• Both spouses have equal right to file\n• Mutual consent or court-ordered divorce\n• Child custody considerations prioritize child welfare\n• Division of shared assets\n\nThis is a sensitive matter. I strongly recommend consulting a family law specialist.';
-  }
-  if (q.includes('employee') || q.includes('worker') || q.includes('labor')) {
-    return 'Employee protections in Tunisia are covered under the Labour Code (Code du Travail). Key protections include:\n\n• Maximum 48-hour work week\n• Minimum wage (SMIG/SMAG) regulations\n• Annual paid leave (at least 1 day per month)\n• Protection against wrongful termination\n• Social security coverage (CNSS)\n\nWould you like to connect with a labor law attorney?';
-  }
-  return `Thank you for your question about "${question}". Based on Tunisian law, this is an area that requires careful analysis of your specific circumstances.\n\nI recommend discussing this with a qualified attorney who can provide personalized legal counsel. Would you like me to connect you with a specialized lawyer?`;
-}
-
 function MessageBubble({ msg, C, isDark }) {
   const isUser = msg.sender === 'user';
   return (
@@ -211,21 +194,35 @@ export default function ChatPage() {
     }
 
     setTimeout(async () => {
-      const aiContent = generateAIResponse(text);
-      const aiMsg = { id: (Date.now() + 1).toString(), content: aiContent, sender: 'ai', created_at: new Date().toISOString() };
-      setMessages(prev => [...prev, aiMsg]);
-      setIsTyping(false);
-
-      // Persist to DB and refresh session list
       try {
-        await chatApi.saveMessages(activeSession.id, [
-          { sender: 'user', content: text.trim() },
-          { sender: 'ai',   content: aiContent },
-        ]);
-        const data = await chatApi.getSessions();
-        setSessions(data.sessions);
-      } catch (e) { console.error('saveMessages:', e); }
-    }, 1500);
+        const data = await chatApi.ask(activeSession.id, text.trim());
+        const aiMsg = data?.aiMessage;
+
+        if (aiMsg?.id && aiMsg?.content) {
+          setMessages(prev => [
+            ...prev.filter((m) => m.id !== userMsg.id),
+            data.userMessage,
+            aiMsg,
+          ]);
+        } else {
+          throw new Error('Invalid AI response payload');
+        }
+
+        const sessionsData = await chatApi.getSessions();
+        setSessions(sessionsData.sessions);
+      } catch (e) {
+        console.error('chat ask:', e);
+        const fallback = {
+          id: (Date.now() + 1).toString(),
+          content: 'I could not reach the AI service right now. Please try again in a moment.',
+          sender: 'ai',
+          created_at: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, fallback]);
+      } finally {
+        setIsTyping(false);
+      }
+    }, 500);
   }, [messages, isTyping, activeSession]);
 
   const showSuggestions = !messages.some(m => m.sender === 'user') && !isTyping;
