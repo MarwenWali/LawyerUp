@@ -3,6 +3,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildParseDebugSummary, parseConstitutionPdf } from "./constitutionPdfParser";
 
+const PDF_FILE_CANDIDATES = [
+  "2014.01.26_-_final_constitution_english_idea_final.pdf",
+  "2014.01.26_-_final_constitution_english_idea_final.pdf.pdf",
+];
+
 /**
  * Dry-run parser test:
  * - Reads the Tunisian Constitution PDF (single file)
@@ -60,29 +65,47 @@ async function main(): Promise<void> {
 }
 
 async function findPdfPath(ingestionDir: string): Promise<string> {
-  // Prefer supabase/ingestion/ local file (what you intended).
-  const files = await readdir(ingestionDir);
-  const pdfs = files.filter((file) => file.toLowerCase().endsWith(".pdf"));
+  const candidateDirs = [
+    ingestionDir,
+    join(ingestionDir, "..", "..", "ai_iss"),
+    join(ingestionDir, "..", "..", "database", "ingestion"),
+  ];
 
-  if (pdfs.length > 0) {
-    const canonicalFileName = "2014.01.26_-_final_constitution_english_idea_final.pdf";
-    const preferred = pdfs.find(
-      (f) => f.toLowerCase() === canonicalFileName.toLowerCase()
-    );
-
-    if (preferred) {
-      const chosen = join(ingestionDir, preferred);
-      await access(chosen);
-      return chosen;
+  // 1) Fast path: check canonical candidates in preferred directories.
+  for (const dir of candidateDirs) {
+    for (const name of PDF_FILE_CANDIDATES) {
+      const candidatePath = join(dir, name);
+      try {
+        await access(candidatePath);
+        if (dir !== ingestionDir) {
+          console.warn(`Using fallback Constitution PDF: ${candidatePath}`);
+        }
+        return candidatePath;
+      } catch {
+        // Continue searching.
+      }
     }
   }
 
-  // Fallback: repo already contains the Constitution PDF under database/ingestion/.
-  const pdfFileName = "2014.01.26_-_final_constitution_english_idea_final.pdf";
-  const fallback = join(ingestionDir, "..", "..", "database", "ingestion", pdfFileName);
-  await access(fallback);
-  console.warn(`No PDF in supabase/ingestion; using fallback: ${fallback}`);
-  return fallback;
+  // 2) Last resort: scan supabase/ingestion for any PDF file.
+  const files = await readdir(ingestionDir);
+  const pdfs = files.filter((file) => file.toLowerCase().endsWith(".pdf"));
+  if (pdfs.length > 0) {
+    const chosen = join(ingestionDir, pdfs[0]);
+    await access(chosen);
+    console.warn(`Using first available PDF in supabase/ingestion: ${chosen}`);
+    return chosen;
+  }
+
+  throw new Error(
+    [
+      "Could not find the Constitution PDF.",
+      "Checked these directories:",
+      ...candidateDirs.map((d) => `- ${d}`),
+      "Expected one of these file names:",
+      ...PDF_FILE_CANDIDATES.map((n) => `- ${n}`),
+    ].join("\n")
+  );
 }
 
 main().catch((error: unknown) => {
