@@ -132,6 +132,8 @@ export const notificationsApi = {
 
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 export const chatApi = {
+  askGuest: (message, history = []) =>
+    api.post("/api/chat/guest-ask", { message, history }),
   getSessions: () => api.get("/api/chat/sessions"),
   createSession: (title) => api.post("/api/chat/sessions", { title }),
   deleteSession: (id) => api.delete(`/api/chat/sessions/${id}`),

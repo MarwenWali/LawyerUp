@@ -1,6 +1,43 @@
 import pool from "../config/database.js";
 import { getAIResponse } from "../services/aiEngine.js";
 
+export async function askGuest(req, res) {
+  try {
+    const message = req.body?.message;
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    const safeHistory = history
+      .filter(
+        (m) =>
+          m &&
+          (m.sender === "user" || m.sender === "ai") &&
+          typeof m.content === "string",
+      )
+      .slice(-8)
+      .map((m) => ({ sender: m.sender, content: m.content }));
+
+    const aiContent = await getAIResponse(message.trim(), safeHistory, {
+      mode: "guest",
+    });
+
+    res.status(200).json({
+      aiMessage: {
+        id: `guest-ai-${Date.now()}`,
+        sender: "ai",
+        content: aiContent,
+        created_at: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("POST /chat/guest-ask error:", err);
+    res.status(500).json({ error: "Failed to process guest AI message" });
+  }
+}
+
 export async function getSessions(req, res) {
   try {
     const { rows } = await pool.query(

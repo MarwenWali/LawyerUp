@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticateToken } from "../middleware/auth.js";
 import {
+  askGuest,
   getSessions,
   createSession,
   updateSessionTitle,
@@ -11,6 +12,9 @@ import {
 } from "../controllers/chat.js";
 
 const router = express.Router();
+
+router.post("/guest-ask", askGuest);
+
 router.use(authenticateToken);
 
 router.get("/sessions", getSessions);
