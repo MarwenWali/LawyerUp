@@ -1,7 +1,20 @@
-﻿import { supabase } from '@/utils/supabase';
+import { supabase } from '@/utils/supabase';
+
+function getSupabaseRuntimeConfig() {
+  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const apikey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
+
+  if (!base || !apikey) {
+    throw new Error(
+      'Missing Supabase config. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY in Frontend/.env and restart Expo.'
+    );
+  }
+
+  return { base, apikey };
+}
 
 function buildUrl(functionName, query = {}) {
-  const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const { base } = getSupabaseRuntimeConfig();
   const qs = new URLSearchParams(
     Object.entries(query)
       .filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -24,13 +37,13 @@ async function getAccessToken() {
 }
 
 async function callFunction(functionName, { method = 'GET', query, body, isFormData = false } = {}) {
+  const { apikey } = getSupabaseRuntimeConfig();
   const token = await getAccessToken();
   const url = buildUrl(functionName, query);
-  const apikey = process.env.EXPO_PUBLIC_SUPABASE_KEY;
 
   const headers = {
     Authorization: `Bearer ${token}`,
-    ...(apikey ? { apikey } : {}),
+    apikey,
   };
 
   if (!isFormData) {

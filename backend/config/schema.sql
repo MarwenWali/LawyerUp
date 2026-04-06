@@ -233,6 +233,29 @@ END $$;
 
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS case_id UUID;
+DO $$
+BEGIN
+  -- Only patch legacy case-messages schema. If conversation_id exists, this is the new Supabase messaging table.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'conversation_id'
+  ) THEN
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS case_id UUID;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id UUID;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS content TEXT;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+    ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 DO $$
 BEGIN
@@ -244,6 +267,27 @@ BEGIN
       AND column_name = 'citizen_id'
   ) THEN
     UPDATE reviews SET user_id = citizen_id WHERE user_id IS NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  -- Legacy case-messages backfill only.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'appointment_id'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'conversation_id'
+  ) THEN
+    UPDATE messages SET case_id = appointment_id WHERE case_id IS NULL;
   END IF;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
@@ -273,7 +317,19 @@ ALTER TABLE lawyer_profiles
   ADD CONSTRAINT lawyer_profiles_user_id_fkey
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
 
-ALTER TABLE cases ALTER COLUMN citizen_id DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'cases'
+      AND column_name = 'citizen_id'
+  ) THEN
+    ALTER TABLE cases ALTER COLUMN citizen_id DROP NOT NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_citizen_id_fkey;
 ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_lawyer_id_fkey;
 ALTER TABLE cases DROP CONSTRAINT IF EXISTS cases_user_id_fkey;
@@ -284,8 +340,33 @@ ALTER TABLE cases
   ADD CONSTRAINT cases_lawyer_id_fkey
   FOREIGN KEY (lawyer_id) REFERENCES users(id) ON DELETE SET NULL NOT VALID;
 
-ALTER TABLE reviews ALTER COLUMN appointment_id DROP NOT NULL;
-ALTER TABLE reviews ALTER COLUMN citizen_id DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reviews'
+      AND column_name = 'appointment_id'
+  ) THEN
+    ALTER TABLE reviews ALTER COLUMN appointment_id DROP NOT NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reviews'
+      AND column_name = 'citizen_id'
+  ) THEN
+    ALTER TABLE reviews ALTER COLUMN citizen_id DROP NOT NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_appointment_id_fkey;
 ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_citizen_id_fkey;
 ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_lawyer_id_fkey;
@@ -302,6 +383,35 @@ ALTER TABLE reviews
   ADD CONSTRAINT reviews_case_id_fkey
   FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL NOT VALID;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'conversation_id'
+  ) THEN
+    -- Supabase conversation messaging table uses auth.users ids.
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_sender_id_fkey
+      FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
+  ELSE
+    -- Legacy case-messages table uses app users ids.
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_case_id_fkey
+      FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_sender_id_fkey
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_user_id_fkey;
 ALTER TABLE notifications
   ADD CONSTRAINT notifications_user_id_fkey
@@ -316,7 +426,19 @@ CREATE INDEX IF NOT EXISTS idx_lawyer_profiles_specialization ON lawyer_profiles
 CREATE INDEX IF NOT EXISTS idx_cases_user_id ON cases(user_id);
 CREATE INDEX IF NOT EXISTS idx_cases_lawyer_id ON cases(lawyer_id);
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
-CREATE INDEX IF NOT EXISTS idx_messages_case_id ON messages(case_id);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'case_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_messages_case_id ON messages(case_id);
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
 CREATE INDEX IF NOT EXISTS idx_contact_requests_user_id ON contact_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_contact_requests_lawyer_id ON contact_requests(lawyer_id);

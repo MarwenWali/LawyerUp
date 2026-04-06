@@ -13,10 +13,21 @@ export function AuthProvider({ children }) {
     restoreSession();
   }, []);
 
+  async function hasSupabaseSession() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return false;
+    return Boolean(data?.session?.access_token);
+  }
+
   async function restoreSession() {
     try {
       const token = await getToken();
       if (token) {
+        const supabaseSessionReady = await hasSupabaseSession();
+        if (!supabaseSessionReady) {
+          throw new Error('Supabase session missing');
+        }
+
         const data = await authApi.verify();
         setUser(data.user);
         await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
@@ -29,24 +40,39 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function syncSupabaseSessionFromPayload(sessionPayload) {
+  async function syncSupabaseSessionFromPayload(sessionPayload, { required = false } = {}) {
     const accessToken = sessionPayload?.access_token;
     const refreshToken = sessionPayload?.refresh_token;
-    if (!accessToken || !refreshToken) return;
+    if (!accessToken || !refreshToken) {
+      if (required) {
+        throw new Error('No Supabase session found. Please sign in again.');
+      }
+      return;
+    }
 
-    await supabase.auth.setSession({
+    const { error } = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
     });
+    if (error && required) {
+      throw new Error(error.message || 'Failed to initialize Supabase session. Please sign in again.');
+    }
   }
 
   async function login(email, password) {
     const data = await authApi.login(email, password);
-    await setToken(data.token);
-    await syncSupabaseSessionFromPayload(data.supabaseSession);
-    await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    try {
+      await setToken(data.token);
+      await syncSupabaseSessionFromPayload(data.supabaseSession, { required: true });
+      await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data.user;
+    } catch (error) {
+      await removeToken();
+      await AsyncStorage.removeItem('lawyerup_user');
+      setUser(null);
+      throw error;
+    }
   }
 
   async function parseResponse(res) {
@@ -105,11 +131,18 @@ export function AuthProvider({ children }) {
       bio: bio || undefined,
       experienceYears: experienceYears || undefined,
     });
-    await setToken(data.token);
-    await syncSupabaseSessionFromPayload(data.supabaseSession);
-    await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    try {
+      await setToken(data.token);
+      await syncSupabaseSessionFromPayload(data.supabaseSession, { required: true });
+      await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
+      setUser(data.user);
+      return data.user;
+    } catch (error) {
+      await removeToken();
+      await AsyncStorage.removeItem('lawyerup_user');
+      setUser(null);
+      throw error;
+    }
   }
 
   async function updateUser(data) {
