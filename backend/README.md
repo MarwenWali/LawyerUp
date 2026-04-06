@@ -1,178 +1,71 @@
 # LawyerUp Backend API
 
-Backend API for LawyerUp - A legal platform connecting users with lawyers in Tunisia.
+Backend API for LawyerUp.
 
-## 🚀 Quick Start
+## Quick Start (Supabase)
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- PostgreSQL (v12 or higher)
+- Node.js 18+
+- A Supabase project
 
-### Installation
-
-1. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-2. **Setup PostgreSQL database**
-   ```bash
-   # Login to PostgreSQL
-   psql -U postgres
-
-   # Create database
-   CREATE DATABASE lawyerup;
-   
-   # Exit psql
-   \q
-   ```
-
-3. **Configure environment**
-   ```bash
-   # Copy example env file
-   cp .env.example .env
-   
-   # Edit .env with your database credentials
-   ```
-
-4. **Run migrations**
-   ```bash
-   npm run db:migrate
-   ```
-
-5. **Seed demo data (optional)**
-   ```bash
-   npm run db:seed
-   ```
-
-6. **Start server**
-   ```bash
-   # Development mode with auto-reload
-   npm run dev
-   
-   # Production mode
-   npm start
-   ```
-
-## 📋 API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - Register new user/lawyer
-- `POST /api/auth/login` - Login
-- `GET /api/auth/verify` - Verify JWT token
-
-### Lawyers
-- `GET /api/lawyers` - Get all verified lawyers (supports filtering)
-- `GET /api/lawyers/:id` - Get lawyer details
-- `PUT /api/lawyers/profile` - Update lawyer profile (requires auth)
-
-### Cases
-- `GET /api/cases` - Get cases (filtered by user role)
-- `POST /api/cases` - Create new case (users only)
-- `GET /api/cases/:id` - Get case details
-- `PATCH /api/cases/:id/status` - Update case status (lawyers only)
-
-### Health Check
-- `GET /health` - Server and database health status
-
-## 🗄️ Database Schema
-
-### Tables
-- `users` - User accounts (users, lawyers, admins)
-- `lawyer_profiles` - Additional lawyer information
-- `cases` - Legal cases
-- `messages` - Case communications
-- `contact_requests` - User-lawyer contact requests
-- `reviews` - Lawyer reviews
-- `guest_prompts` - AI chat usage tracking
-
-## 🔧 Scripts
-
-- `npm start` - Start production server
-- `npm run dev` - Start development server with hot reload
-- `npm run db:migrate` - Run database migrations
-- `npm run db:seed` - Populate database with demo data
-- `npm run db:reset` - Drop all tables (destructive!)
-
-## 🔐 Authentication
-
-The API uses JWT tokens for authentication. Include the token in requests:
-
-```
-Authorization: Bearer <your-token>
+### 1. Install
+```bash
+npm install
 ```
 
-### Demo Accounts (after seeding)
-
-**User Account:**
-- Email: `user@demo.com`
-- Password: `password123`
-
-**Lawyer Account:**
-- Email: `gharbi@lawyer.tn`
-- Password: `password123`
-
-## 📁 Project Structure
-
-```
-backend/
-├── config/
-│   ├── database.js       # PostgreSQL connection
-│   └── schema.sql        # Database schema
-├── middleware/
-│   ├── auth.js           # JWT authentication
-│   └── upload.js         # File upload handling
-├── routes/
-│   ├── auth.js           # Authentication endpoints
-│   ├── lawyers.js        # Lawyer endpoints
-│   └── cases.js          # Case management endpoints
-├── scripts/
-│   ├── migrate.js        # Migration runner
-│   ├── seed.js           # Demo data seeder
-│   └── reset.js          # Database reset
-├── uploads/              # Uploaded files (diplomas, etc.)
-├── .env.example          # Environment variables template
-├── server.js             # Express server setup
-└── package.json          # Dependencies
-
-```
-
-## 🌐 Environment Variables
-
-Create a `.env` file with:
+### 2. Configure environment
+Create `backend/.env` from `backend/.env.example` and set at least:
 
 ```env
-# Database
-DATABASE_URL=postgresql://username:password@localhost:5432/lawyerup
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=lawyerup
-DB_USER=postgres
-DB_PASSWORD=your_password
-
-# Server
-PORT=3000
-NODE_ENV=development
-
-# JWT
-JWT_SECRET=your-secret-key-change-this
-JWT_EXPIRES_IN=7d
-
-# File Upload
-MAX_FILE_SIZE=5242880
-UPLOAD_DIR=./uploads
+SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+JWT_SECRET=your-secret
 ```
 
-## 🔒 Security Features
+Notes:
+- `SUPABASE_DB_URL` is the DB connection used by this backend.
+- `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY` are required for `supabase-js` client features.
+- `SUPABASE_SERVICE_ROLE_KEY` is optional unless you need admin-level Supabase operations.
+- `SUPABASE_ANON_KEY` is still accepted as a legacy fallback.
+- SSL is enabled by default for managed DBs. Set `DB_SSL=false` only for local non-SSL Postgres.
 
-- Password hashing with bcrypt
-- JWT token authentication
-- Role-based access control
-- Input validation
-- SQL injection prevention (parameterized queries)
-- File upload restrictions
-- CORS configuration
+### 3. Run schema and seed
+```bash
+npm run db:migrate
+npm run db:seed
+```
 
-## 📝 License
+### 4. Start API
+```bash
+npm run dev
+```
 
-ISC
+## Scripts
+- `npm run dev` - Start with nodemon
+- `npm start` - Start server
+- `npm run db:migrate` - Apply schema from `config/schema.sql`
+- `npm run db:seed` - Insert demo data
+- `npm run db:reset` - Drop tables (destructive)
+
+## Database Connection Priority
+1. `SUPABASE_DB_URL`
+2. `DATABASE_URL`
+3. `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD`
+
+## Supabase Client Usage
+Use the shared client from `config/supabase.js`:
+
+```js
+import { requireSupabase } from '../config/supabase.js';
+
+const supabase = requireSupabase(); // uses SUPABASE_PUBLISHABLE_KEY
+const supabaseAdmin = requireSupabase({ admin: true }); // uses SUPABASE_SERVICE_ROLE_KEY
+```
+
+## Auth
+Use JWT Bearer token:
+```http
+Authorization: Bearer <token>
+```

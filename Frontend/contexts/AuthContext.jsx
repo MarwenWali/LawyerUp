@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi, userApi, setToken, removeToken, getToken, BASE_URL } from '@/services/api';
+import { supabase } from '@/utils/supabase';
 
 const AuthContext = createContext(null);
 
@@ -28,16 +29,43 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function syncSupabaseSessionFromPayload(sessionPayload) {
+    const accessToken = sessionPayload?.access_token;
+    const refreshToken = sessionPayload?.refresh_token;
+    if (!accessToken || !refreshToken) return;
+
+    await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+  }
+
   async function login(email, password) {
     const data = await authApi.login(email, password);
     await setToken(data.token);
+    await syncSupabaseSessionFromPayload(data.supabaseSession);
     await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
   }
 
+  async function parseResponse(res) {
+    const raw = await res.text();
+    if (!raw) return {};
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return { message: raw };
+    }
+  }
+
   async function register(name, email, password, role, phoneNumber, diplomaAsset, specialization, bio, experienceYears) {
-    if (role === 'lawyer' && diplomaAsset) {
+    if (role === 'lawyer') {
+      if (!diplomaAsset) {
+        throw new Error('Please upload your diploma to register as a lawyer');
+      }
+
       const formData = new FormData();
       formData.append('fullName', name);
       formData.append('email', email);
@@ -56,11 +84,14 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Registration failed');
-      await setToken(data.token);
-      await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
-      setUser(data.user);
+      const data = await parseResponse(res);
+      if (!res.ok) throw new Error(data.error || data.message || 'Registration failed');
+
+      // Lawyer accounts are pending verification; do not sign in automatically.
+      await supabase.auth.signOut();
+      await removeToken();
+      await AsyncStorage.removeItem('lawyerup_user');
+      setUser(null);
       return data.user;
     }
 
@@ -75,6 +106,7 @@ export function AuthProvider({ children }) {
       experienceYears: experienceYears || undefined,
     });
     await setToken(data.token);
+    await syncSupabaseSessionFromPayload(data.supabaseSession);
     await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
@@ -104,6 +136,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     setUser(null);
+    await supabase.auth.signOut();
     await removeToken();
     await AsyncStorage.removeItem('lawyerup_user');
   }
