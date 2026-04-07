@@ -23,3 +23,11 @@ export function clearAuth() {
 export function getToken() {
   return readAuth()?.token ?? null;
 }
+
+export function getSupabaseSession() {
+  return readAuth()?.supabaseSession ?? null;
+}
+
+export function getSupabaseAccessToken() {
+  return getSupabaseSession()?.access_token ?? null;
+}

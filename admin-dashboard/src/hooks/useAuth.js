@@ -23,7 +23,11 @@ export function useAuth() {
     const res = await authAPI.login(email, password);
     if (!res?.token || !res?.user) throw new Error('Invalid response from server');
     if (res.user.role !== 'admin') throw new Error('Admin account required. Access denied.');
-    writeAuth({ token: res.token, user: res.user });
+    writeAuth({
+      token: res.token,
+      user: res.user,
+      supabaseSession: res.supabaseSession || null,
+    });
     setUser(res.user);
     window.dispatchEvent(new Event(AUTH_EVENT));
     return res.user;
