@@ -23,14 +23,23 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|pdf/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  const allowedExtensions = new Set(['.jpeg', '.jpg', '.png', '.pdf', '.heic', '.heif', '.webp']);
+  const allowedMimeTypes = new Set([
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/heic',
+    'image/heif',
+    'image/webp',
+    'application/pdf',
+  ]);
+  const extname = allowedExtensions.has(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedMimeTypes.has((file.mimetype || '').toLowerCase());
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
-    cb(new Error('Only images (JPEG, PNG) and PDF files are allowed'));
+    cb(new Error('Only JPEG, PNG, HEIC/HEIF, WEBP images and PDF files are allowed'));
   }
 };
 

@@ -4,23 +4,47 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+const usingManagedPostgres = Boolean(
+  process.env.SUPABASE_DB_URL ||
+  (connectionString && connectionString.includes('supabase.co'))
+);
+
+const poolConfig = connectionString
+  ? {
+      connectionString,
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: Number(process.env.DB_PORT) || 5432,
+      database: process.env.DB_NAME || 'lawyerup',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+    };
+
+if (process.env.DB_SSL === 'false') {
+  poolConfig.ssl = false;
+} else if (usingManagedPostgres) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'lawyerup',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
+  ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
+  console.log(
+    usingManagedPostgres
+      ? 'Connected to Supabase Postgres database'
+      : 'Connected to PostgreSQL database'
+  );
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Database connection error:', err);
+  console.error('Database connection error:', err);
   process.exit(-1);
 });
 

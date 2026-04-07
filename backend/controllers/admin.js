@@ -1,5 +1,12 @@
 import pool from '../config/database.js';
 
+function getPaginationParams(query, { defaultLimit = 50, maxLimit = 200 } = {}) {
+  const page = Math.max(parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || defaultLimit, 1), maxLimit);
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
 async function logActivity(userId, userName, action, details, type = 'info') {
   try {
     await pool.query(
@@ -37,10 +44,25 @@ export async function getStats(req, res) {
 
 export async function getLogs(req, res) {
   try {
-    const result = await pool.query(
-      'SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 200'
-    );
-    res.json({ logs: result.rows });
+    const { page, limit, offset } = getPaginationParams(req.query);
+    const [countResult, result] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM activity_logs'),
+      pool.query(
+        'SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+        [limit, offset]
+      ),
+    ]);
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    res.json({
+      logs: result.rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     console.error('Logs error:', error);
     res.status(500).json({ error: 'Failed to fetch logs' });
@@ -49,18 +71,38 @@ export async function getLogs(req, res) {
 
 export async function getUsers(req, res) {
   try {
-    const result = await pool.query(`
-      SELECT
-        u.id, u.email, u.full_name, u.phone_number, u.role,
-        u.is_verified, u.status, u.created_at,
-        lp.specialization, lp.experience_years, lp.rating,
-        lp.cases_handled, lp.is_available, lp.diploma_url
-      FROM users u
-      LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
-      WHERE u.role != 'admin'
-      ORDER BY u.created_at DESC
-    `);
-    res.json({ users: result.rows });
+    const { page, limit, offset } = getPaginationParams(req.query, {
+      defaultLimit: 50,
+      maxLimit: 100,
+    });
+
+    const [countResult, result] = await Promise.all([
+      pool.query(`SELECT COUNT(*) FROM users WHERE role != 'admin'`),
+      pool.query(
+        `SELECT
+          u.id, u.email, u.full_name, u.phone_number, u.role,
+          u.is_verified, u.status, u.created_at,
+          lp.specialization, lp.experience_years, lp.rating,
+          lp.cases_handled, lp.is_available, lp.diploma_url
+        FROM users u
+        LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+        WHERE u.role != 'admin'
+        ORDER BY u.created_at DESC
+        LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      ),
+    ]);
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    res.json({
+      users: result.rows,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     console.error('Admin get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });

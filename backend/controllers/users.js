@@ -1,5 +1,13 @@
 import bcrypt from 'bcryptjs';
 import pool from '../config/database.js';
+import { syncSupabasePasswordForPublicUser } from '../services/supabaseAuthBridge.js';
+
+function getPaginationParams(query, { defaultLimit = 50, maxLimit = 100 } = {}) {
+  const page = Math.max(parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(query.limit, 10) || defaultLimit, 1), maxLimit);
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
 
 export async function getMe(req, res) {
   try {
@@ -68,6 +76,8 @@ export async function updateMe(req, res) {
 }
 
 export async function changePassword(req, res) {
+  let client;
+
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -76,19 +86,50 @@ export async function changePassword(req, res) {
     if (newPassword.length < 6) {
       return res.status(400).json({ error: 'New password must be at least 6 characters' });
     }
-    const r = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
-    if (r.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const r = await client.query(
+      'SELECT id, email, full_name, role, password FROM users WHERE id = $1 FOR UPDATE',
+      [req.user.id]
+    );
+    if (r.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
     const match = await bcrypt.compare(currentPassword, r.rows[0].password);
-    if (!match) return res.status(400).json({ error: 'Current password is incorrect' });
+    if (!match) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
     const hashed = await bcrypt.hash(newPassword, 10);
-    await pool.query(
+    await client.query(
       'UPDATE users SET password = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [hashed, req.user.id]
     );
+
+    await syncSupabasePasswordForPublicUser({
+      publicUserId: r.rows[0].id,
+      email: r.rows[0].email,
+      role: r.rows[0].role,
+      fullName: r.rows[0].full_name,
+      password: newPassword,
+      db: client,
+    });
+
+    await client.query('COMMIT');
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+    }
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  } finally {
+    client?.release();
   }
 }
 
@@ -109,15 +150,23 @@ export async function uploadPhoto(req, res) {
 
 export async function getAllUsers(req, res) {
   try {
-    const result = await pool.query(`
-      SELECT
-        u.id, u.email, u.full_name, u.phone_number, u.role, u.is_verified, u.created_at, u.updated_at,
-        lp.specialization, lp.experience_years, lp.rating, lp.cases_handled, lp.is_available, lp.diploma_url
-      FROM users u
-      LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
-      ORDER BY u.created_at DESC
-    `);
-    res.json(result.rows.map(user => ({
+    const { page, limit, offset } = getPaginationParams(req.query);
+
+    const [countResult, result] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM users'),
+      pool.query(
+        `SELECT
+          u.id, u.email, u.full_name, u.phone_number, u.role, u.is_verified, u.created_at, u.updated_at,
+          lp.specialization, lp.experience_years, lp.rating, lp.cases_handled, lp.is_available, lp.diploma_url
+        FROM users u
+        LEFT JOIN lawyer_profiles lp ON u.id = lp.user_id
+        ORDER BY u.created_at DESC
+        LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      ),
+    ]);
+
+    const users = result.rows.map((user) => ({
       id: user.id,
       email: user.email,
       full_name: user.full_name,
@@ -132,7 +181,18 @@ export async function getAllUsers(req, res) {
       cases_handled: user.cases_handled,
       is_available: user.is_available,
       diploma_url: user.diploma_url,
-    })));
+    }));
+
+    const total = parseInt(countResult.rows[0].count, 10);
+    res.json({
+      users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({ error: 'Failed to fetch users' });

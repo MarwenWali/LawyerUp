@@ -1,10 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Scale, LayoutDashboard, Users, FileText, Settings, LogOut } from 'lucide-react';
+import { Scale, LayoutDashboard, Users, FileText, Settings, LogOut, MessageSquare } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth.js';
 
 const NAV = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard, end: true },
   { label: 'Users', path: '/users', icon: Users },
+  { label: 'Messages', path: '/messages', icon: MessageSquare },
   { label: 'Activity Logs', path: '/logs', icon: FileText },
   { label: 'Settings', path: '/settings', icon: Settings },
 ];

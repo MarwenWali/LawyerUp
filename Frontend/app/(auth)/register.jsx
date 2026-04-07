@@ -10,6 +10,8 @@ import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SPECIALIZATION_OPTIONS } from '@/constants/mockData';
 
+const MAX_DIPLOMA_SIZE_BYTES = 5 * 1024 * 1024;
+
 export default function RegisterPage() {
   const { register } = useAuth();
   const insets = useSafeAreaInsets();
@@ -33,11 +35,16 @@ export default function RegisterPage() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.6,
       });
 
       if (!result.canceled) {
-        setDiploma(result.assets[0]);
+        const selectedAsset = result.assets[0];
+        if (typeof selectedAsset.fileSize === 'number' && selectedAsset.fileSize > MAX_DIPLOMA_SIZE_BYTES) {
+          Alert.alert('Error', 'Diploma file is too large. Please upload a file smaller than 5MB.');
+          return;
+        }
+        setDiploma(selectedAsset);
         if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error) {
@@ -52,6 +59,10 @@ export default function RegisterPage() {
     }
     if (role === 'lawyer' && !diploma) {
       Alert.alert('Error', 'Please upload your diploma to register as a lawyer');
+      return;
+    }
+    if (role === 'lawyer' && typeof diploma?.fileSize === 'number' && diploma.fileSize > MAX_DIPLOMA_SIZE_BYTES) {
+      Alert.alert('Error', 'Diploma file is too large. Please upload a file smaller than 5MB.');
       return;
     }
     if (password !== confirmPassword) {
