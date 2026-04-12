@@ -1,5 +1,10 @@
 node_modules/
 .env
+<<<<<<< HEAD
 uploads/
 *.log
 .DS_Store
+=======
+.DS_Store
+*.log
+>>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2

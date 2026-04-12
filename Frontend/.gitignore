@@ -1,9 +1,12 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
+<<<<<<< HEAD
 # local env files (tunnel URLs, secrets)
 .env.local
 .env*.local
 
+=======
+>>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
 # dependencies
 node_modules/
 
@@ -42,4 +45,8 @@ yarn-error.*
 
 # generated native folders
 /ios
+<<<<<<< HEAD
 /android
+=======
+/android
+>>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
