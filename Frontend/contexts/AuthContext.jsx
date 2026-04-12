@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi, userApi, setToken, removeToken, getToken, BASE_URL } from '@/services/api';
 import { supabase } from '@/utils/supabase';
+import { clearSupabaseSessionCache } from '@/utils/supabaseSession';
 
 const AuthContext = createContext(null);
 
@@ -22,19 +23,23 @@ export function AuthProvider({ children }) {
   async function restoreSession() {
     try {
       const token = await getToken();
-      if (token) {
-        const supabaseSessionReady = await hasSupabaseSession();
-        if (!supabaseSessionReady) {
-          throw new Error('Supabase session missing');
-        }
+      if (!token) {
+        return;
+      }
 
-        const data = await authApi.verify();
-        setUser(data.user);
-        await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
+      const data = await authApi.verify();
+      setUser(data.user);
+      await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
+
+      const supabaseSessionReady = await hasSupabaseSession();
+      if (!supabaseSessionReady) {
+        await clearSupabaseSessionCache();
       }
     } catch {
       await removeToken();
       await AsyncStorage.removeItem('lawyerup_user');
+      await clearSupabaseSessionCache();
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -55,6 +60,7 @@ export function AuthProvider({ children }) {
       refresh_token: refreshToken,
     });
     if (error && required) {
+      await clearSupabaseSessionCache();
       throw new Error(error.message || 'Failed to initialize Supabase session. Please sign in again.');
     }
   }
@@ -70,6 +76,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       await removeToken();
       await AsyncStorage.removeItem('lawyerup_user');
+      await clearSupabaseSessionCache();
       setUser(null);
       throw error;
     }
@@ -114,7 +121,7 @@ export function AuthProvider({ children }) {
       if (!res.ok) throw new Error(data.error || data.message || 'Registration failed');
 
       // Lawyer accounts are pending verification; do not sign in automatically.
-      await supabase.auth.signOut();
+      await clearSupabaseSessionCache();
       await removeToken();
       await AsyncStorage.removeItem('lawyerup_user');
       setUser(null);
@@ -140,6 +147,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       await removeToken();
       await AsyncStorage.removeItem('lawyerup_user');
+      await clearSupabaseSessionCache();
       setUser(null);
       throw error;
     }
@@ -169,7 +177,7 @@ export function AuthProvider({ children }) {
 
   async function logout() {
     setUser(null);
-    await supabase.auth.signOut();
+    await clearSupabaseSessionCache();
     await removeToken();
     await AsyncStorage.removeItem('lawyerup_user');
   }

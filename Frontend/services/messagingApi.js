@@ -1,4 +1,5 @@
 import { supabase } from '@/utils/supabase';
+import { clearSupabaseSessionCache } from '@/utils/supabaseSession';
 
 function getSupabaseRuntimeConfig() {
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -25,15 +26,26 @@ function buildUrl(functionName, query = {}) {
 }
 
 async function getAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
 
-  const token = data.session?.access_token;
-  if (!token) {
-    throw new Error('No Supabase session found. Please sign in first.');
+    const token = data.session?.access_token;
+    if (!token) {
+      throw new Error('No Supabase session found. Please sign in again to use inbox chat.');
+    }
+
+    return token;
+  } catch (error) {
+    const message = String(error?.message || '');
+    if (message.toLowerCase().includes('invalid refresh token')) {
+      await clearSupabaseSessionCache();
+    }
+    if (message.toLowerCase().includes('missing') || message.toLowerCase().includes('session')) {
+      await clearSupabaseSessionCache();
+    }
+    throw new Error('No Supabase session found. Please sign in again to use inbox chat.');
   }
-
-  return token;
 }
 
 async function callFunction(functionName, { method = 'GET', query, body, isFormData = false } = {}) {

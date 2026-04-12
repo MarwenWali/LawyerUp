@@ -217,8 +217,12 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
 
   async function handleStartChat() {
     try {
+      if (user?.id && user.id === lawyer.id) {
+        throw new Error('You cannot start a chat with yourself.');
+      }
+
       setStartingChat(true);
-      const payload = await messageService.startConversation({ lawyerId: lawyer.id });
+      const payload = await messageService.startConversation({ participantId: lawyer.id });
       const conversationId = payload?.conversation?.id || payload?.conversation?.conversation_id || payload?.conversationId;
       if (!conversationId) {
         throw new Error('Could not open chat');
