@@ -132,7 +132,7 @@ export default function ProfilePage() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
         <View style={styles.profileHeader}>
           <Pressable onPress={handlePhotoUpload} style={styles.avatarWrapper}>
             {user?.profile_photo_url ? (

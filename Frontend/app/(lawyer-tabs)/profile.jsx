@@ -56,7 +56,7 @@ export default function LawyerProfilePage() {
     if (user?.id) {
       lawyersApi.getById(user.id)
         .then(data => { if (typeof data?.isAvailable === 'boolean') setIsAvailable(data.isAvailable); })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [user?.id]);
 
@@ -167,7 +167,7 @@ export default function LawyerProfilePage() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
         <View style={styles.profileHeader}>
           <Pressable onPress={handlePhotoUpload} style={styles.avatarWrapper}>
             {user?.profile_photo_url ? (
@@ -212,12 +212,12 @@ export default function LawyerProfilePage() {
             {availLoading
               ? <ActivityIndicator size="small" color={C.accent} />
               : <Switch
-                  value={isAvailable}
-                  onValueChange={handleAvailabilityToggle}
-                  trackColor={{ false: '#e5e7eb', true: C.success + '55' }}
-                  thumbColor={isAvailable ? C.success : '#9ca3af'}
-                  ios_backgroundColor="#e5e7eb"
-                />}
+                value={isAvailable}
+                onValueChange={handleAvailabilityToggle}
+                trackColor={{ false: '#e5e7eb', true: C.success + '55' }}
+                thumbColor={isAvailable ? C.success : '#9ca3af'}
+                ios_backgroundColor="#e5e7eb"
+              />}
           </View>
         </View>
 

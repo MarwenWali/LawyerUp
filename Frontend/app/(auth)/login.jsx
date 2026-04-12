@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, Platform, Keyboard, TouchableWithoutFeedback, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -55,11 +55,22 @@ export default function LoginPage() {
   }
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={[styles.container, { backgroundColor: C.background, paddingBottom: insets.bottom + 16 }]}>
-        <View style={styles.content}>
-          <View style={styles.logoContainer}>
-            <View style={[styles.logoIcon, { backgroundColor: C.muted }]}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 16 }} keyboardShouldPersistTaps="handled">
+            <View style={[styles.headerActions, { paddingTop: insets.top + 10, paddingHorizontal: 20 }]}>
+              <Pressable 
+                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]} 
+                onPress={() => router.replace('/')}
+              >
+                <Ionicons name="arrow-back" size={24} color={C.foreground} />
+              </Pressable>
+            </View>
+
+            <View style={styles.content}>
+              <View style={styles.logoContainer}>
+                <View style={[styles.logoIcon, { backgroundColor: C.muted }]}>
               <Ionicons name="scale" size={28} color={C.accent} />
             </View>
             <Text style={[styles.title, { color: C.tint }]}>{t.welcomeBack}</Text>
@@ -128,13 +139,17 @@ export default function LoginPage() {
             <Text style={[styles.footerLink, { color: C.accent }]}>{t.signUp}</Text>
           </Pressable>
         </View>
-      </View>
-    </TouchableWithoutFeedback>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerActions: { marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(128,128,128,0.1)' },
   content: { flex: 1, paddingHorizontal: 24, paddingTop: 16 },
   logoContainer: { alignItems: 'center', marginBottom: 28 },
   logoIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },

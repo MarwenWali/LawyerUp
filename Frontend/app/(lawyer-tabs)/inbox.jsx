@@ -310,23 +310,29 @@ export default function LawyerInboxPage() {
     setStartingAdminChat(true);
 
     try {
+      // Check for an existing admin conversation first
       const existingPayload = await messagingApi.listConversations('admin_lawyer');
-      const existing = Array.isArray(existingPayload?.conversations)
-        ? existingPayload.conversations[0]
-        : null;
+      const conversations = Array.isArray(existingPayload?.conversations)
+        ? existingPayload.conversations
+        : [];
 
-      if (existing?.conversation_id) {
+      const existing = conversations[0];
+      const existingId = existing?.conversation_id || existing?.id;
+
+      if (existingId) {
         setActiveTab('admin_lawyer');
-        openLegacyConversation(existing.conversation_id, 'Admin Team');
+        openLegacyConversation(existingId, 'Admin Team');
         return;
       }
 
+      // Start a new conversation with the admin
       const adminUser = await messagingApi.getFirstAdminUser();
       const createPayload = await messagingApi.createConversation('admin_lawyer', adminUser.id);
-      const conversationId = createPayload?.conversation?.id;
+      // Backend returns { conversation: { id, ... } }
+      const conversationId = createPayload?.conversation?.id || createPayload?.id;
 
       if (!conversationId) {
-        throw new Error('Could not start admin conversation');
+        throw new Error('Could not start admin conversation — no ID returned');
       }
 
       setActiveTab('admin_lawyer');
