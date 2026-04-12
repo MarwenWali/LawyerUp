@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform, Keyboard, TouchableWithoutFeedback, Image, Modal, FlatList } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, ActivityIndicator, Alert, ScrollView, Platform, Keyboard, TouchableWithoutFeedback, Image, Modal, FlatList, KeyboardAvoidingView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -89,15 +89,24 @@ export default function RegisterPage() {
 
   return (
     <View style={[{ flex: 1, backgroundColor: C.background }]}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-        >
-        <View style={styles.content}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: insets.bottom + 24 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <View style={[styles.headerActions, { paddingTop: insets.top + 10, paddingHorizontal: 20 }]}>
+              <Pressable 
+                style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]} 
+                onPress={() => router.replace('/')}
+              >
+                <Ionicons name="arrow-back" size={24} color={C.foreground} />
+              </Pressable>
+            </View>
+            <View style={styles.content}>
           <View style={styles.logoContainer}>
             <View style={[styles.logoIcon, { backgroundColor: C.muted }]}>
               <Ionicons name="scale" size={28} color={C.accent} />
@@ -224,8 +233,9 @@ export default function RegisterPage() {
             </Pressable>
           </View>
         </View>
-        </ScrollView>
-      </TouchableWithoutFeedback>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
       {/* Specialization Picker Modal */}
       <Modal visible={specPickerOpen} transparent animationType="fade" onRequestClose={() => setSpecPickerOpen(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setSpecPickerOpen(false)}>
@@ -253,6 +263,8 @@ export default function RegisterPage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  headerActions: { marginBottom: 10, flexDirection: 'row', alignItems: 'center' },
+  backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(128,128,128,0.1)' },
   content: { paddingHorizontal: 24, paddingTop: 16 },
   logoContainer: { alignItems: 'center', marginBottom: 24 },
   logoIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },

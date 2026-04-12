@@ -128,7 +128,7 @@ export default function ChatPage() {
       if (data.sessions.length > 0) {
         await openSession(data.sessions[0]);
       } else {
-        setView('history');
+        await startNewChat();
       }
     } catch (e) {
       console.error('loadSessions:', e);

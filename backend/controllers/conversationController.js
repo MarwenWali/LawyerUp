@@ -70,12 +70,12 @@ function buildConversationShape(row) {
     unread_count: Number(row.unread_count || 0),
     last_message: row.last_message_id
       ? {
-          id: row.last_message_id,
-          conversation_id: row.id,
-          sender_id: row.last_message_sender_id,
-          content: row.last_message_content,
-          created_at: row.last_message_created_at,
-        }
+        id: row.last_message_id,
+        conversation_id: row.id,
+        sender_id: row.last_message_sender_id,
+        content: row.last_message_content,
+        created_at: row.last_message_created_at,
+      }
       : null,
     last_message_preview: row.last_message_preview || '',
     citizen,
@@ -144,7 +144,15 @@ async function fetchConversationRow(conversationId, userId, currentRole) {
   return rows[0] || null;
 }
 
-async function fetchConversationPair(citizenId, lawyerId) {
+async function fetchConversationPair(citizenId, lawyerId, type) {
+  // Match on type if provided, otherwise fall back to any pair
+  if (type) {
+    const { rows } = await pool.query(
+      'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 AND type = $3 LIMIT 1',
+      [citizenId, lawyerId, type]
+    );
+    if (rows[0]) return rows[0];
+  }
   const { rows } = await pool.query(
     'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 LIMIT 1',
     [citizenId, lawyerId]
@@ -155,8 +163,8 @@ async function fetchConversationPair(citizenId, lawyerId) {
 export async function startConversation(req, res) {
   try {
     const currentRole = normalizeRoleLabel(req.user.role);
-    if (!['citizen', 'lawyer'].includes(currentRole)) {
-      return res.status(403).json({ error: 'Only citizens and lawyers can start conversations' });
+    if (!['citizen', 'lawyer', 'admin'].includes(currentRole)) {
+      return res.status(403).json({ error: 'Only citizens, lawyers, and admins can start conversations' });
     }
 
     const participantId =
@@ -191,29 +199,51 @@ export async function startConversation(req, res) {
       return res.status(400).json({ error: 'Citizens can only start conversations with lawyers' });
     }
 
-    if (currentRole === 'lawyer' && targetRole !== 'citizen') {
-      return res.status(400).json({ error: 'Lawyers can only start conversations with citizens' });
+    if (currentRole === 'lawyer' && targetRole !== 'citizen' && targetRole !== 'admin') {
+      return res.status(400).json({ error: 'Lawyers can only start conversations with citizens or admins' });
     }
 
-    const citizenId = currentRole === 'lawyer' ? targetUser.id : req.user.id;
-    const lawyerId = currentRole === 'lawyer' ? req.user.id : targetUser.id;
+    if (currentRole === 'admin' && targetRole !== 'lawyer') {
+      return res.status(400).json({ error: 'Admins can only start conversations with lawyers' });
+    }
 
-    let conversation = await fetchConversationPair(citizenId, lawyerId);
+    // Determine type: admin<->lawyer chats use 'admin_lawyer', citizen<->lawyer use 'lawyer_user'
+    const convType = (currentRole === 'admin' || targetRole === 'admin') ? 'admin_lawyer' : 'lawyer_user';
+
+    // For admin_lawyer chats, admin occupies the citizen_id slot
+    const citizenId = (currentRole === 'lawyer' && targetRole !== 'admin') ? targetUser.id
+      : (currentRole === 'admin') ? req.user.id
+      : req.user.id;
+    const lawyerId = (currentRole === 'lawyer') ? req.user.id : targetUser.id;
+
+    let conversation = await fetchConversationPair(citizenId, lawyerId, convType);
     const wasCreated = !conversation;
 
     if (!conversation) {
-      const insertResult = await pool.query(
-        `INSERT INTO conversations (citizen_id, lawyer_id)
-         VALUES ($1, $2)
-         ON CONFLICT (citizen_id, lawyer_id) DO NOTHING
-         RETURNING id, citizen_id, lawyer_id, status, created_at, last_message_at`,
-        [citizenId, lawyerId]
+      // Check if a type column exists before including it
+      const colCheck = await pool.query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'conversations' AND column_name = 'type' LIMIT 1`
       );
+      const hasTypeCol = colCheck.rows.length > 0;
+
+      const insertQuery = hasTypeCol
+        ? `INSERT INTO conversations (citizen_id, lawyer_id, type)
+           VALUES ($1, $2, $3)
+           ON CONFLICT DO NOTHING
+           RETURNING id, citizen_id, lawyer_id, status, created_at, last_message_at`
+        : `INSERT INTO conversations (citizen_id, lawyer_id)
+           VALUES ($1, $2)
+           ON CONFLICT (citizen_id, lawyer_id) DO NOTHING
+           RETURNING id, citizen_id, lawyer_id, status, created_at, last_message_at`;
+      const insertParams = hasTypeCol ? [citizenId, lawyerId, convType] : [citizenId, lawyerId];
+
+      const insertResult = await pool.query(insertQuery, insertParams);
 
       if (insertResult.rows.length > 0) {
         conversation = insertResult.rows[0];
       } else {
-        conversation = await fetchConversationPair(citizenId, lawyerId);
+        conversation = await fetchConversationPair(citizenId, lawyerId, convType);
       }
     }
 
@@ -232,8 +262,8 @@ export async function startConversation(req, res) {
 export async function listConversations(req, res) {
   try {
     const currentRole = normalizeRoleLabel(req.user.role);
-    if (!['citizen', 'lawyer'].includes(currentRole)) {
-      return res.status(403).json({ error: 'Only citizens and lawyers can view conversations' });
+    if (!['citizen', 'lawyer', 'admin'].includes(currentRole)) {
+      return res.status(403).json({ error: 'Only citizens, lawyers, and admins can view conversations' });
     }
 
     const { rows } = await pool.query(

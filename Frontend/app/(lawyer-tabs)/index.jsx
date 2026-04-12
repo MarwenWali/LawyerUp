@@ -97,7 +97,7 @@ export default function LawyerDashboard() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }} contentInsetAdjustmentBehavior="automatic">
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
         <View style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: C.textSecondary }]}>{t.welcomeBackLawyer}</Text>

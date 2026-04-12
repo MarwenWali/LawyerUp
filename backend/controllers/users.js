@@ -284,3 +284,17 @@ export async function deleteUser(req, res) {
     res.status(500).json({ error: 'Failed to delete user' });
   }
 }
+
+export async function getFirstAdmin(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT id, full_name, email FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1`
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'No admin account found' });
+    const admin = result.rows[0];
+    res.json({ id: admin.id, full_name: admin.full_name, email: admin.email });
+  } catch (error) {
+    console.error('getFirstAdmin error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin user' });
+  }
+}

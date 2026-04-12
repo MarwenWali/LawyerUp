@@ -190,3 +190,7 @@ async function shutdown(signal) {
 // Graceful shutdown
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Trigger nodemon restart
+
+// Restart for conversationController 

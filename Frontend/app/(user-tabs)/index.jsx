@@ -108,7 +108,6 @@ export default function UserDashboard() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}
-        contentInsetAdjustmentBehavior="automatic"
       >
         <View style={styles.header}>
           <View>

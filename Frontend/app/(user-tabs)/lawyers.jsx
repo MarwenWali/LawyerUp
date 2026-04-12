@@ -1,7 +1,7 @@
-﻿import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView,
-  Modal, Platform, Keyboard, TouchableWithoutFeedback,
+  Modal, Platform, Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView,
   ActivityIndicator, Alert, Image, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -432,7 +432,7 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
           {/* â”€â”€ Contact request sub-modal â”€â”€ */}
           <Modal visible={contactOpen} animationType="fade" transparent onRequestClose={() => setContactOpen(false)}>
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={profileStyles.contactOverlay}>
+              <KeyboardAvoidingView style={profileStyles.contactOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
                 <View style={[profileStyles.contactSheet, { backgroundColor: C.card }]}>
                   <View style={profileStyles.contactHeader}>
                     <Text style={[profileStyles.contactTitle, { color: C.foreground }]}>{t.contactTitle} {lawyer.name}</Text>
@@ -470,7 +470,7 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
                     </Pressable>
                   </View>
                 </View>
-              </View>
+              </KeyboardAvoidingView>
             </TouchableWithoutFeedback>
           </Modal>
         </View>
