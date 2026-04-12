@@ -250,6 +250,13 @@ export async function startConversation(req, res) {
     }
 
     const conversationRow = await fetchConversationRow(conversation.id, req.user.id, currentRole);
+    const io = req.app.get('io');
+
+    if (io && conversationRow) {
+      const payload = { conversation: buildConversationShape(conversationRow) };
+      io.to(`user:${citizenId}`).emit('conversation_updated', payload);
+      io.to(`user:${lawyerId}`).emit('conversation_updated', payload);
+    }
 
     return res.status(wasCreated ? 201 : 200).json({
       message: 'Conversation started successfully',

@@ -175,20 +175,31 @@ Deno.serve(async (req: Request) => {
     attachmentUrl = `${ATTACHMENTS_BUCKET}/${objectPath}`;
   }
 
+  const messageInsert: Record<string, unknown> = {
+    conversation_id: conversationId,
+    sender_id: user.id,
+    content,
+  };
+
+  if (attachmentUrl) {
+    messageInsert.attachment_url = attachmentUrl;
+  }
+
   const { data: insertedMessage, error: insertError } = await supabaseAdmin
     .from('messages')
-    .insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content,
-      attachment_url: attachmentUrl,
-    })
-    .select('id, conversation_id, sender_id, content, attachment_url, created_at')
+    .insert(messageInsert)
+    .select('id, conversation_id, sender_id, content, created_at')
     .single();
 
   if (insertError || !insertedMessage) {
-    return json(500, { error: 'Failed to send message' });
+    console.error('send-message insert error', insertError);
+    return json(500, { error: insertError?.message || 'Failed to send message' });
   }
+
+  const message = {
+    ...insertedMessage,
+    ...(attachmentUrl ? { attachment_url: attachmentUrl } : {}),
+  };
 
   const { error: readInsertError } = await supabaseAdmin
     .from('message_reads')
@@ -198,11 +209,14 @@ Deno.serve(async (req: Request) => {
     });
 
   if (readInsertError && readInsertError.code !== '23505') {
-    return json(500, { error: 'Message sent but failed to mark as read for sender' });
+    console.error('send-message read error', readInsertError);
+    return json(500, {
+      error: readInsertError.message || 'Message sent but failed to mark as read for sender',
+    });
   }
 
   return json(200, {
-    message: insertedMessage,
+    message,
     rate_limit: {
       max_per_minute: MAX_MESSAGES_PER_MINUTE,
       used_in_last_minute: (sentLastMinute ?? 0) + 1,
