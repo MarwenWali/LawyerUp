@@ -230,6 +230,25 @@ export default function LawyerDashboard() {
               <Text style={[styles.quickActionText, { color: C.foreground }]}>{t.scheduleLabel}</Text>
             </Pressable>
           </View>
+          <Pressable
+            style={({ pressed }) => [
+              styles.messagesCard,
+              { backgroundColor: C.card, borderColor: C.border },
+              pressed && { opacity: 0.9 },
+            ]}
+            onPress={() => router.push('/(messaging)/conversations')}
+          >
+            <View style={[styles.messagesIcon, { backgroundColor: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)' }]}>
+              <Ionicons name="chatbubbles-outline" size={24} color={C.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.messagesTitle, { color: C.foreground }]}>Messages</Text>
+              <Text style={[styles.messagesSubtitle, { color: C.mutedForeground }]}>
+                View citizen conversations
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={C.mutedForeground} />
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -270,6 +289,10 @@ const styles = StyleSheet.create({
   quickActions: { flexDirection: 'row', gap: 12 },
   quickAction: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12, borderWidth: 1 },
   quickActionText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
+  messagesCard: { marginTop: 12, borderRadius: 16, padding: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  messagesIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  messagesTitle: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+  messagesSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
   badge: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
   badgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#fff' },
   availCard: { marginHorizontal: 20, marginBottom: 20, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },

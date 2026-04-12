@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -8,6 +17,7 @@ import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/utils/supabase';
 import { messagingApi } from '@/services/messagingApi';
+import { useSocket } from '@/src/hooks/useSocket';
 
 const TABS = [
   { key: 'admin_lawyer', label: 'Admin Chat' },
@@ -27,13 +37,63 @@ function formatTimestamp(isoDate) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function InboxRow({ item, isTyping, C, onPress }) {
+function getInitials(value) {
+  return String(value || '?')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+}
+
+function normalizeBackendConversation(conversation) {
+  const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
+  const title = participant.name || participant.full_name || 'Conversation';
+
+  return {
+    ...conversation,
+    conversation_id: conversation.id,
+    other_participant_name: title,
+    other_participant_role: participant.role || 'citizen',
+    last_message: conversation.last_message?.content || conversation.last_message_preview || '',
+    last_message_at: conversation.last_message_at || conversation.created_at,
+    unread_count: Number(conversation.unread_count || 0),
+  };
+}
+
+function resolveAdminTitle(item) {
+  if (item?.other_participant_name) {
+    return item.other_participant_name;
+  }
+
+  const otherRole = item?.other_participant_role || 'participant';
+  if (otherRole === 'admin') return 'Admin Team';
+  if (otherRole === 'user' || otherRole === 'citizen') return 'Client';
+  return 'Lawyer';
+}
+
+function resolvePreview(item, isTyping) {
+  if (isTyping) {
+    return 'Typing...';
+  }
+
+  if (!item) {
+    return 'No messages yet';
+  }
+
+  if (typeof item.last_message === 'string') {
+    return item.last_message.trim() || 'No messages yet';
+  }
+
+  return item.last_message_preview?.trim()
+    || item.last_message?.content?.trim()
+    || item.preview
+    || 'No messages yet';
+}
+
+function InboxRow({ item, title, avatarLabel, preview, isTyping, C, onPress }) {
   const unread = Number(item.unread_count || 0);
-  const otherRole = item.other_participant_role || 'participant';
-  const title = otherRole === 'admin' ? 'Admin Team' : otherRole === 'user' ? 'Client' : 'Lawyer';
-  const preview = isTyping
-    ? 'Typing...'
-    : (item.last_message?.trim() || 'No messages yet');
 
   return (
     <Pressable
@@ -45,13 +105,15 @@ function InboxRow({ item, isTyping, C, onPress }) {
       onPress={onPress}
     >
       <View style={[styles.avatar, { backgroundColor: C.accentLight }]}>
-        <Text style={[styles.avatarText, { color: C.accent }]}>{title[0]}</Text>
+        <Text style={[styles.avatarText, { color: C.accent }]}>{avatarLabel || getInitials(title)}</Text>
       </View>
 
       <View style={{ flex: 1 }}>
         <View style={styles.rowTop}>
           <Text style={[styles.title, { color: C.foreground }]}>{title}</Text>
-          <Text style={[styles.time, { color: C.mutedForeground }]}>{formatTimestamp(item.last_message_at || item.updated_at)}</Text>
+          <Text style={[styles.time, { color: C.mutedForeground }]}>
+            {formatTimestamp(item.last_message_at || item.updated_at || item.created_at)}
+          </Text>
         </View>
 
         <View style={styles.rowBottom}>
@@ -82,19 +144,47 @@ export default function LawyerInboxPage() {
   const { user } = useAuth();
   const C = useTheme();
   const { t } = useLanguage();
+  const {
+    conversations: backendConversations,
+    refreshConversations,
+    typingByConversation: backendTypingByConversation,
+  } = useSocket();
 
   const [activeTab, setActiveTab] = useState('admin_lawyer');
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [typingByConversation, setTypingByConversation] = useState({});
+  const [adminRows, setAdminRows] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(true);
+  const [adminRefreshing, setAdminRefreshing] = useState(false);
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendRefreshing, setBackendRefreshing] = useState(false);
+  const [legacyTypingByConversation, setLegacyTypingByConversation] = useState({});
   const [startingAdminChat, setStartingAdminChat] = useState(false);
   const typingTimeoutsRef = useRef({});
-  const loadVersionRef = useRef(0);
   const refreshTimeoutRef = useRef(null);
-  const loadedTabRef = useRef(null);
+  const loadVersionRef = useRef(0);
 
-  const openConversation = useCallback((conversationId, title) => {
+  const backendRows = useMemo(
+    () => backendConversations.map(normalizeBackendConversation),
+    [backendConversations]
+  );
+
+  const isBackendTab = activeTab === 'lawyer_user';
+  const rows = isBackendTab ? backendRows : adminRows;
+  const typingByConversation = isBackendTab ? backendTypingByConversation : legacyTypingByConversation;
+  const loading = isBackendTab ? (backendLoading && backendRows.length === 0) : adminLoading;
+  const refreshing = isBackendTab ? backendRefreshing : adminRefreshing;
+
+  const openBackendConversation = useCallback((conversation) => {
+    const participant = conversation.other_participant || {};
+    router.push({
+      pathname: '/(messaging)/chat',
+      params: {
+        conversationId: conversation.id,
+        title: participant.name || participant.full_name || 'Conversation',
+      },
+    });
+  }, []);
+
+  const openLegacyConversation = useCallback((conversationId, title) => {
     router.push({
       pathname: '/(lawyer-tabs)/inbox-chat',
       params: {
@@ -104,35 +194,54 @@ export default function LawyerInboxPage() {
     });
   }, []);
 
-  const loadConversations = useCallback(async (isRefresh = false) => {
-    if (!user?.id) return;
+  const loadAdminConversations = useCallback(async (isRefresh = false) => {
+    if (!user?.id || isBackendTab) return;
     const loadVersion = ++loadVersionRef.current;
 
-    if (isRefresh) setRefreshing(true);
-    else if (loadedTabRef.current !== activeTab) setLoading(true);
+    if (isRefresh) setAdminRefreshing(true);
+    else setAdminLoading(true);
 
     try {
-      const payload = await messagingApi.listConversations(activeTab);
+      const payload = await messagingApi.listConversations('admin_lawyer');
       if (loadVersion !== loadVersionRef.current) return;
-      setRows(Array.isArray(payload?.conversations) ? payload.conversations : []);
-      loadedTabRef.current = activeTab;
+      setAdminRows(Array.isArray(payload?.conversations) ? payload.conversations : []);
     } catch (error) {
-      console.error('Inbox load error:', error);
+      console.error('Admin inbox load error:', error);
+      Alert.alert('Messaging', error?.message || 'Failed to load admin conversations');
     } finally {
       if (loadVersion === loadVersionRef.current) {
-        setLoading(false);
-        setRefreshing(false);
+        setAdminLoading(false);
+        setAdminRefreshing(false);
       }
     }
-  }, [activeTab, user?.id]);
+  }, [isBackendTab, user?.id]);
 
-  useEffect(() => {
-    loadedTabRef.current = null;
-    loadConversations();
-  }, [loadConversations]);
+  const loadBackendConversations = useCallback(async (isRefresh = false) => {
+    if (!user?.id || !isBackendTab) return;
+
+    if (isRefresh) setBackendRefreshing(true);
+    else setBackendLoading(true);
+
+    try {
+      await refreshConversations();
+    } catch (error) {
+      console.error('Backend inbox load error:', error);
+      Alert.alert('Messaging', error?.message || 'Failed to load conversations');
+    } finally {
+      setBackendLoading(false);
+      setBackendRefreshing(false);
+    }
+  }, [isBackendTab, refreshConversations, user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
+
+    if (activeTab === 'lawyer_user') {
+      loadBackendConversations(false);
+      return undefined;
+    }
+
+    loadAdminConversations(false);
 
     const scheduleRefresh = () => {
       if (refreshTimeoutRef.current) {
@@ -140,7 +249,7 @@ export default function LawyerInboxPage() {
       }
 
       refreshTimeoutRef.current = setTimeout(() => {
-        loadConversations(false).catch(() => {});
+        loadAdminConversations(false).catch(() => {});
       }, 220);
     };
 
@@ -160,7 +269,7 @@ export default function LawyerInboxPage() {
 
         if (!conversationId || !senderId || senderId === user.id) return;
 
-        setTypingByConversation((prev) => ({
+        setLegacyTypingByConversation((prev) => ({
           ...prev,
           [conversationId]: isTyping,
         }));
@@ -171,14 +280,14 @@ export default function LawyerInboxPage() {
 
         if (isTyping) {
           typingTimeoutsRef.current[conversationId] = setTimeout(() => {
-            setTypingByConversation((prev) => ({ ...prev, [conversationId]: false }));
+            setLegacyTypingByConversation((prev) => ({ ...prev, [conversationId]: false }));
           }, 3500);
         }
       })
       .subscribe();
 
     const intervalId = setInterval(() => {
-      loadConversations(false).catch(() => {});
+      loadAdminConversations(false).catch(() => {});
     }, 8000);
 
     return () => {
@@ -189,7 +298,7 @@ export default function LawyerInboxPage() {
       supabase.removeChannel(typingChannel);
       clearInterval(intervalId);
     };
-  }, [loadConversations, user?.id]);
+  }, [activeTab, loadAdminConversations, loadBackendConversations, user?.id]);
 
   const unreadTotal = useMemo(
     () => rows.reduce((sum, row) => sum + Number(row.unread_count || 0), 0),
@@ -208,7 +317,7 @@ export default function LawyerInboxPage() {
 
       if (existing?.conversation_id) {
         setActiveTab('admin_lawyer');
-        openConversation(existing.conversation_id, 'Admin Team');
+        openLegacyConversation(existing.conversation_id, 'Admin Team');
         return;
       }
 
@@ -221,28 +330,67 @@ export default function LawyerInboxPage() {
       }
 
       setActiveTab('admin_lawyer');
-      await loadConversations(false);
-      openConversation(conversationId, 'Admin Team');
+      await loadAdminConversations(false);
+      openLegacyConversation(conversationId, 'Admin Team');
     } catch (error) {
       Alert.alert('Messaging', error?.message || 'Failed to start admin chat');
     } finally {
       setStartingAdminChat(false);
     }
-  }, [loadConversations, openConversation, startingAdminChat]);
+  }, [loadAdminConversations, openLegacyConversation, startingAdminChat]);
+
+  const renderItem = useCallback(({ item }) => {
+    if (isBackendTab) {
+      const participant = item.other_participant || {};
+      const title = participant.name || participant.full_name || 'Conversation';
+      return (
+        <InboxRow
+          item={item}
+          title={title}
+          avatarLabel={participant.initials || getInitials(title)}
+          preview={resolvePreview(item, Boolean(backendTypingByConversation[item.id]))}
+          isTyping={Boolean(backendTypingByConversation[item.id])}
+          C={C}
+          onPress={() => openBackendConversation(item)}
+        />
+      );
+    }
+
+    const title = resolveAdminTitle(item);
+    const conversationId = item.conversation_id || item.id;
+    return (
+      <InboxRow
+        item={item}
+        title={title}
+        avatarLabel={getInitials(title)}
+        preview={resolvePreview(item, Boolean(legacyTypingByConversation[conversationId]))}
+        isTyping={Boolean(legacyTypingByConversation[conversationId])}
+        C={C}
+        onPress={() => openLegacyConversation(conversationId, title)}
+      />
+    );
+  }, [
+    C,
+    backendTypingByConversation,
+    isBackendTab,
+    legacyTypingByConversation,
+    openBackendConversation,
+    openLegacyConversation,
+  ]);
 
   return (
-    <View style={[styles.container, { backgroundColor: C.background }]}> 
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: C.border, backgroundColor: C.headerBg }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.heading, { color: C.tint }]}>{t.inbox || 'Inbox'}</Text>
           {unreadTotal > 0 && (
-            <View style={[styles.totalBadge, { backgroundColor: C.accentLight }]}> 
+            <View style={[styles.totalBadge, { backgroundColor: C.accentLight }]}>
               <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} unread</Text>
             </View>
           )}
         </View>
 
-        <View style={[styles.tabsWrap, { backgroundColor: C.muted }]}> 
+        <View style={[styles.tabsWrap, { backgroundColor: C.muted }]}>
           {TABS.map((tab) => {
             const active = activeTab === tab.key;
             return (
@@ -251,7 +399,9 @@ export default function LawyerInboxPage() {
                 style={[styles.tab, active && { backgroundColor: C.card }]}
                 onPress={() => setActiveTab(tab.key)}
               >
-                <Text style={[styles.tabText, { color: active ? C.foreground : C.mutedForeground }]}>{tab.label}</Text>
+                <Text style={[styles.tabText, { color: active ? C.foreground : C.mutedForeground }]}>
+                  {tab.label}
+                </Text>
               </Pressable>
             );
           })}
@@ -279,32 +429,42 @@ export default function LawyerInboxPage() {
         <View style={styles.center}>
           <ActivityIndicator color={C.accent} size="large" />
         </View>
-      ) : (
+      ) : rows.length === 0 ? (
         <FlatList
-          data={rows}
-          keyExtractor={(item) => item.conversation_id}
-          renderItem={({ item }) => (
-            <InboxRow
-              item={item}
-              isTyping={Boolean(typingByConversation[item.conversation_id])}
-              C={C}
-              onPress={() => {
-                const otherRole = item.other_participant_role || 'participant';
-                const title = otherRole === 'admin' ? 'Admin Team' : otherRole === 'user' ? 'Client' : 'Lawyer';
-                openConversation(item.conversation_id, title);
-              }}
-            />
-          )}
-          contentContainerStyle={rows.length ? styles.listContent : styles.emptyContent}
+          data={[]}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.emptyContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => loadConversations(true)} tintColor={C.accent} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => (isBackendTab ? loadBackendConversations(true) : loadAdminConversations(true))}
+              tintColor={C.accent}
+            />
           }
           ListEmptyComponent={
             <View style={styles.center}>
               <Ionicons name="chatbubble-ellipses-outline" size={44} color={C.mutedForeground} />
               <Text style={[styles.emptyTitle, { color: C.foreground }]}>No conversations yet</Text>
-              <Text style={[styles.emptyText, { color: C.textSecondary }]}>Conversations will appear here once messaging starts.</Text>
+              <Text style={[styles.emptyText, { color: C.textSecondary }]}>
+                {isBackendTab
+                  ? 'Conversations will appear here once a citizen sends you a message.'
+                  : 'Conversations will appear here once admin messaging starts.'}
+              </Text>
             </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(item) => String(item.conversation_id || item.id)}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => (isBackendTab ? loadBackendConversations(true) : loadAdminConversations(true))}
+              tintColor={C.accent}
+            />
           }
         />
       )}

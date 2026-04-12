@@ -56,10 +56,83 @@ CREATE TABLE IF NOT EXISTS cases (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Messages table (for case communications)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'conversation_status'
+  ) THEN
+    CREATE TYPE conversation_status AS ENUM ('active', 'closed');
+  END IF;
+END $$;
+
+-- Citizen/lawyer conversations
+CREATE TABLE IF NOT EXISTS conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  citizen_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lawyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status conversation_status DEFAULT 'active',
+  UNIQUE (citizen_id, lawyer_id)
+);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'conversations'
+  ) THEN
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS citizen_id UUID;
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS lawyer_id UUID;
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS status conversation_status DEFAULT 'active';
+
+    IF EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'conversations'
+        AND column_name = 'user_id'
+    ) THEN
+      UPDATE conversations
+      SET citizen_id = user_id
+      WHERE citizen_id IS NULL AND user_id IS NOT NULL;
+    END IF;
+
+    UPDATE conversations
+    SET last_message_at = COALESCE(last_message_at, created_at, CURRENT_TIMESTAMP)
+    WHERE last_message_at IS NULL;
+
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_citizen_id_fkey;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_lawyer_id_fkey;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_user_id_fkey;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_citizen_id_lawyer_id_key;
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_citizen_id_fkey
+      FOREIGN KEY (citizen_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_lawyer_id_fkey
+      FOREIGN KEY (lawyer_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_citizen_id_lawyer_id_key UNIQUE (citizen_id, lawyer_id);
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_conversations_citizen_id ON conversations(citizen_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_lawyer_id ON conversations(lawyer_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at);
+
+-- Messages table (for case communications and citizen/lawyer conversations)
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  case_id UUID REFERENCES cases(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   is_read BOOLEAN DEFAULT FALSE,
@@ -233,29 +306,13 @@ END $$;
 
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS user_id UUID;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS case_id UUID;
-DO $$
-BEGIN
-  -- Only patch legacy case-messages schema. If conversation_id exists, this is the new Supabase messaging table.
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.tables
-    WHERE table_schema = 'public'
-      AND table_name = 'messages'
-  ) AND NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'messages'
-      AND column_name = 'conversation_id'
-  ) THEN
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS case_id UUID;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id UUID;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS content TEXT;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
-    ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-  END IF;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id UUID;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS case_id UUID;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_id UUID;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE messages ALTER COLUMN case_id DROP NOT NULL;
 
 DO $$
 BEGIN
@@ -273,7 +330,6 @@ END $$;
 
 DO $$
 BEGIN
-  -- Legacy case-messages backfill only.
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -291,6 +347,18 @@ BEGIN
   END IF;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+
+-- In-app notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  data JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS data JSONB;
@@ -385,30 +453,18 @@ ALTER TABLE reviews
 
 DO $$
 BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'messages'
-      AND column_name = 'conversation_id'
-  ) THEN
-    -- Supabase conversation messaging table uses auth.users ids.
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_sender_id_fkey
-      FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
-  ELSE
-    -- Legacy case-messages table uses app users ids.
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_case_id_fkey
-      FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_sender_id_fkey
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
-  END IF;
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+  ALTER TABLE messages
+    ADD CONSTRAINT messages_case_id_fkey
+    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
+  ALTER TABLE messages
+    ADD CONSTRAINT messages_conversation_id_fkey
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE NOT VALID;
+  ALTER TABLE messages
+    ADD CONSTRAINT messages_sender_id_fkey
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
@@ -426,6 +482,7 @@ CREATE INDEX IF NOT EXISTS idx_lawyer_profiles_specialization ON lawyer_profiles
 CREATE INDEX IF NOT EXISTS idx_cases_user_id ON cases(user_id);
 CREATE INDEX IF NOT EXISTS idx_cases_lawyer_id ON cases(lawyer_id);
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
 DO $$
 BEGIN
   IF EXISTS (
@@ -494,18 +551,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session
 DROP TRIGGER IF EXISTS update_chat_sessions_updated_at ON chat_sessions;
 CREATE TRIGGER update_chat_sessions_updated_at BEFORE UPDATE ON chat_sessions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- In-app notifications
-CREATE TABLE IF NOT EXISTS notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type VARCHAR(50) NOT NULL,
-  title VARCHAR(255) NOT NULL,
-  body TEXT NOT NULL,
-  is_read BOOLEAN DEFAULT FALSE,
-  data JSONB,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read);

@@ -4,6 +4,7 @@ import {
   Modal, Platform, Keyboard, TouchableWithoutFeedback,
   ActivityIndicator, Alert, Image, Animated,
 } from 'react-native';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -13,6 +14,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { SPECIALIZATIONS } from '@/constants/mockData';
 import { lawyersApi, contactsApi, reviewsApi, BASE_URL } from '@/services/api';
+import { messageService } from '@/src/services/messageService';
 
 // â”€â”€ Star display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Stars({ rating, size = 14, color = '#D4A03C' }) {
@@ -132,6 +134,7 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
   const [contactOpen, setContactOpen] = useState(false);
   const [contactMsg, setContactMsg]   = useState('');
   const [sending, setSending]         = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
 
   const fetchReviews = useCallback(async () => {
     if (!lawyer) return;
@@ -212,6 +215,29 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
     }
   }
 
+  async function handleStartChat() {
+    try {
+      setStartingChat(true);
+      const payload = await messageService.startConversation({ lawyerId: lawyer.id });
+      const conversationId = payload?.conversation?.id || payload?.conversation?.conversation_id || payload?.conversationId;
+      if (!conversationId) {
+        throw new Error('Could not open chat');
+      }
+
+      router.push({
+        pathname: '/(messaging)/chat',
+        params: {
+          conversationId,
+          title: lawyer.name,
+        },
+      });
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to open chat.');
+    } finally {
+      setStartingChat(false);
+    }
+  }
+
   if (!lawyer) return null;
 
   const photoUri = lawyer.profilePhotoUrl ? `${BASE_URL}${lawyer.profilePhotoUrl}` : null;
@@ -286,6 +312,27 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
             )}
 
             {/* â”€â”€ Action buttons â”€â”€ */}
+            {user?.role === 'user' && (
+              <Pressable
+                style={({ pressed }) => [
+                  profileStyles.messageBtn,
+                  { backgroundColor: C.tint },
+                  pressed && { opacity: 0.85 },
+                  startingChat && { opacity: 0.7 },
+                ]}
+                onPress={handleStartChat}
+                disabled={startingChat}
+              >
+                {startingChat ? (
+                  <ActivityIndicator size="small" color={C.primaryForeground} />
+                ) : (
+                  <Feather name="message-circle" size={16} color={C.primaryForeground} />
+                )}
+                <Text style={[profileStyles.messageBtnText, { color: C.primaryForeground }]}>
+                  Message Lawyer
+                </Text>
+              </Pressable>
+            )}
             <View style={profileStyles.actions}>
               <Pressable
                 style={({ pressed }) => [profileStyles.actionBtn, { backgroundColor: C.tint }, pressed && { opacity: 0.85 }]}
@@ -455,6 +502,8 @@ const profileStyles = StyleSheet.create({
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
   bio: { fontSize: 14, fontFamily: 'Inter_400Regular', lineHeight: 22 },
+  messageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 12, marginBottom: 10 },
+  messageBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
   actions: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 12 },
   actionBtnText: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
