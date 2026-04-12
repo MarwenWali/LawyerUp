@@ -3,7 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import multer from 'multer';
 import path from 'path';
+import { createServer } from 'http';
 import { fileURLToPath } from 'url';
+import { Server as SocketIOServer } from 'socket.io';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -14,7 +16,9 @@ import contactsRoutes from './routes/contacts.js';
 import reviewsRoutes from './routes/reviews.js';
 import adminRoutes from './routes/admin.js';
 import chatRoutes from './routes/chat.js';
+import conversationsRoutes from './routes/conversations.js';
 import notificationsRoutes from './routes/notifications.js';
+import { initializeSocket } from './socket/socketHandler.js';
 
 // Import database
 import pool from './config/database.js';
@@ -30,6 +34,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const httpServer = createServer(app);
 
 // Middleware
 const allowedOrigins = [
@@ -40,11 +45,15 @@ const allowedOrigins = [
   'http://localhost:8081', // Expo Metro
 ];
 
+const isAllowedOrigin = (origin) => (
+  !origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost')
+);
+
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests without an origin header (mobile apps, curl, Postman)
-      if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost')) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -55,6 +64,22 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Socket CORS: origin ${origin} not allowed`));
+      }
+    },
+    credentials: true,
+  },
+});
+
+app.set('io', io);
+initializeSocket(io);
 
 // Serve static files (uploads)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -92,6 +117,7 @@ app.use('/api/contacts', contactsRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/conversations', conversationsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 
 // Error handling middleware
@@ -122,7 +148,7 @@ app.use((req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, () => {
+const server = httpServer.listen(PORT, () => {
   console.log('\nLawyerUp backend server is running');
   console.log(`Port: ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
@@ -135,6 +161,8 @@ const server = app.listen(PORT, () => {
   console.log('  GET  /api/lawyers/:id');
   console.log('  GET  /api/cases');
   console.log('  POST /api/cases');
+  console.log('  GET  /api/conversations');
+  console.log('  POST /api/conversations');
   console.log('\nReady to accept connections.\n');
 });
 
@@ -150,6 +178,7 @@ server.on('error', (err) => {
 async function shutdown(signal) {
   console.log(`\n${signal} received, closing server...`);
   server.close(async () => {
+    io.close();
     await pool.end();
     process.exit(0);
   });

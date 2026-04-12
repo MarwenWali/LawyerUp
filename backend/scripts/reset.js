@@ -8,10 +8,12 @@ async function reset() {
       DROP TABLE IF EXISTS reviews CASCADE;
       DROP TABLE IF EXISTS contact_requests CASCADE;
       DROP TABLE IF EXISTS messages CASCADE;
+      DROP TABLE IF EXISTS conversations CASCADE;
       DROP TABLE IF EXISTS cases CASCADE;
       DROP TABLE IF EXISTS lawyer_profiles CASCADE;
       DROP TABLE IF EXISTS users CASCADE;
       DROP TABLE IF EXISTS guest_prompts CASCADE;
+      DROP TYPE IF EXISTS conversation_status CASCADE;
       DROP EXTENSION IF EXISTS "uuid-ossp" CASCADE;
     `);
 
