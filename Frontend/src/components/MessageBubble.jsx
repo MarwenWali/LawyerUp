@@ -11,34 +11,29 @@ function formatTime(value) {
 }
 
 export function MessageBubble({ message, isOwn, theme }) {
-  const received = !isOwn;
+  // Logic: compare message.sender_id with current user's id (passed as isOwn prop)
   const bubbleStyle = isOwn
-    ? [styles.ownBubble, { backgroundColor: theme.tint }]
-    : [styles.otherBubble, { backgroundColor: theme.card, borderColor: theme.border }];
+    ? [styles.ownBubble, { backgroundColor: '#007AFF' }] // Blue for Sent
+    : [styles.otherBubble, { backgroundColor: '#E9E9EB', borderColor: '#E9E9EB' }]; // Grey for Received
 
   return (
     <View style={[styles.row, isOwn ? styles.rowRight : styles.rowLeft]}>
-      <View style={[styles.bubble, ...bubbleStyle]}>
-        <Text style={[styles.messageText, { color: isOwn ? theme.primaryForeground : theme.foreground }]}>
+      <View style={[styles.bubble, bubbleStyle]}>
+        <Text style={[styles.messageText, { color: isOwn ? '#FFFFFF' : '#000000' }]}>
           {message.content}
         </Text>
         <View style={styles.metaRow}>
-          <Text style={[styles.time, { color: isOwn ? theme.primaryForeground : theme.mutedForeground }]}>
+          <Text style={[styles.time, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#8E8E93' }]}>
             {formatTime(message.created_at)}
           </Text>
           {isOwn && (
             <Ionicons
               name={message.is_read ? 'checkmark-done' : 'checkmark'}
               size={14}
-              color={message.is_read ? theme.primaryForeground : 'rgba(255,255,255,0.7)'}
+              color={message.is_read ? '#FFFFFF' : 'rgba(255,255,255,0.5)'}
               style={styles.receipt}
             />
           )}
-          {received && message.sender?.name ? (
-            <Text style={[styles.sender, { color: theme.mutedForeground }]}>
-              {message.sender.name}
-            </Text>
-          ) : null}
         </View>
       </View>
     </View>

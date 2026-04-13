@@ -473,36 +473,12 @@ ALTER TABLE reviews
   ADD CONSTRAINT reviews_case_id_fkey
   FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE SET NULL NOT VALID;
 
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'messages'
-      AND column_name = 'conversation_id'
-  ) THEN
-    -- Supabase conversation messaging table uses auth.users ids.
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_sender_id_fkey
-      FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
-  ELSE
-    -- Legacy case-messages table uses app users ids.
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_case_id_fkey
-      FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
-    ALTER TABLE messages
-      ADD CONSTRAINT messages_sender_id_fkey
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
-  END IF;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
+  -- Ensure messages.sender_id always references public.users(id)
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
+  ALTER TABLE messages
+    ADD CONSTRAINT messages_sender_id_fkey
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
 
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_user_id_fkey;
 ALTER TABLE notifications

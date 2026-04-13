@@ -5,7 +5,9 @@ function isCitizenRole(role) {
 }
 
 function normalizeRoleLabel(role) {
-  return role === 'user' ? 'citizen' : role;
+  if (!role) return 'citizen';
+  const normalized = String(role).toLowerCase();
+  return normalized === 'user' ? 'citizen' : normalized;
 }
 
 function buildParticipant(userRow, extras = {}) {
