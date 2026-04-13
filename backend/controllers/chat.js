@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { getAIResponse } from '../services/aiEngine.js';
 
 export async function getSessions(req, res) {
   try {
@@ -124,5 +125,67 @@ export async function saveMessages(req, res) {
   } catch (err) {
     console.error('POST /chat/sessions/:id/messages error:', err);
     res.status(500).json({ error: 'Failed to save messages' });
+  }
+}
+
+export async function generateReply(req, res) {
+  try {
+    const content = String(req.body?.content || '').trim();
+    if (!content) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+
+    const { rows: sess } = await pool.query(
+      `SELECT id FROM chat_sessions WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.user.id]
+    );
+    if (!sess.length) return res.status(404).json({ error: 'Session not found' });
+
+    const { rows: insertedUserRows } = await pool.query(
+      `INSERT INTO chat_messages (session_id, sender, content)
+       VALUES ($1, 'user', $2)
+       RETURNING id, sender, content, created_at`,
+      [req.params.id, content]
+    );
+    const userMessage = insertedUserRows[0];
+
+    const { rows: historyRows } = await pool.query(
+      `SELECT sender, content
+       FROM chat_messages
+       WHERE session_id = $1
+       ORDER BY created_at ASC
+       LIMIT 40`,
+      [req.params.id]
+    );
+
+    let aiText;
+    try {
+      aiText = await getAIResponse(content, historyRows, {
+        userId: req.user.id,
+        sessionId: req.params.id,
+      });
+    } catch (aiError) {
+      console.error('POST /chat/sessions/:id/reply ai error:', aiError);
+      await pool.query('DELETE FROM chat_messages WHERE id = $1', [userMessage.id]);
+      return res.status(502).json({ error: 'AI assistant unavailable right now. Please try again.' });
+    }
+
+    const { rows: insertedAiRows } = await pool.query(
+      `INSERT INTO chat_messages (session_id, sender, content)
+       VALUES ($1, 'ai', $2)
+       RETURNING id, sender, content, created_at`,
+      [req.params.id, aiText]
+    );
+    const aiMessage = insertedAiRows[0];
+
+    await pool.query(
+      `UPDATE chat_sessions SET updated_at = NOW() WHERE id = $1`,
+      [req.params.id]
+    );
+
+    res.status(201).json({ userMessage, aiMessage });
+  } catch (err) {
+    console.error('POST /chat/sessions/:id/reply error:', err);
+    res.status(500).json({ error: 'Failed to generate AI reply' });
   }
 }

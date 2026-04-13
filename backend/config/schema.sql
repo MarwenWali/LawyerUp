@@ -395,6 +395,7 @@ BEGIN
     -- Supabase conversation messaging table uses auth.users ids.
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
     ALTER TABLE messages
       ADD CONSTRAINT messages_sender_id_fkey
       FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
@@ -402,6 +403,7 @@ BEGIN
     -- Legacy case-messages table uses app users ids.
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
     ALTER TABLE messages
       ADD CONSTRAINT messages_case_id_fkey
       FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
@@ -487,6 +489,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Backward compatibility for drifted chat tables missing defaults/constraints.
+ALTER TABLE chat_sessions ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+ALTER TABLE chat_messages ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+ALTER TABLE chat_sessions DROP CONSTRAINT IF EXISTS chat_sessions_user_id_fkey;
+ALTER TABLE chat_sessions
+  ADD CONSTRAINT chat_sessions_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
