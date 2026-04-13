@@ -1,10 +1,10 @@
 node_modules/
 .env
-<<<<<<< HEAD
+.DS_Store
+*.log
 uploads/
-*.log
-.DS_Store
-=======
-.DS_Store
-*.log
->>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
+# local env files
+.env.local
+.env*.local
+.env
+.env.example

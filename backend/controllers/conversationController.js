@@ -283,8 +283,8 @@ export async function listConversations(req, res) {
 export async function markConversationRead(req, res) {
   try {
     const currentRole = normalizeRoleLabel(req.user.role);
-    if (!['citizen', 'lawyer'].includes(currentRole)) {
-      return res.status(403).json({ error: 'Only citizens and lawyers can mark conversations read' });
+    if (!['citizen', 'lawyer', 'admin'].includes(currentRole)) {
+      return res.status(403).json({ error: 'Only citizens, lawyers, and admins can mark conversations read' });
     }
 
     const conversationResult = await pool.query(

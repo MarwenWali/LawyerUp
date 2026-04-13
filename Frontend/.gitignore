@@ -1,12 +1,10 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-<<<<<<< HEAD
-# local env files (tunnel URLs, secrets)
-.env.local
+# local env files
 .env*.local
+.env
+.env.example
 
-=======
->>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
 # dependencies
 node_modules/
 

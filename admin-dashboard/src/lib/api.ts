@@ -1,14 +1,28 @@
-// API Client for LawyerUp Admin Dashboard
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// API Client for LawyerUp Admin Dashboard — keep auth in sync with storage.js / useAuth.js
+import { getToken } from './storage.js';
+
+const API_BASE_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:3000');
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean>;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function apiCall(endpoint: string, options: RequestOptions = {}) {
   const { params, ...fetchOptions } = options;
-  
-  // Build URL with query parameters
+
   let url = `${API_BASE_URL}${endpoint}`;
   if (params) {
     const queryString = new URLSearchParams(
@@ -17,22 +31,20 @@ async function apiCall(endpoint: string, options: RequestOptions = {}) {
     if (queryString) url += `?${queryString}`;
   }
 
-  // Set default headers
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...fetchOptions.headers,
+    ...getAuthHeaders(),
+    ...(fetchOptions.headers as Record<string, string> || {}),
   };
 
   try {
     const response = await fetch(url, {
       ...fetchOptions,
       headers,
-      credentials: 'include', // Include cookies if needed
     });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(error.message || `API Error: ${response.status}`);
+      throw new Error(error.message || error.error || `API Error: ${response.status}`);
     }
 
     return await response.json();
@@ -42,41 +54,63 @@ async function apiCall(endpoint: string, options: RequestOptions = {}) {
   }
 }
 
-// Lawyers API
-export const lawyersAPI = {
-  getPending: () => apiCall('/api/pending-lawyers', { method: 'GET' }),
-  getApproved: () => apiCall('/api/approved-lawyers', { method: 'GET' }),
-  getRejected: () => apiCall('/api/rejected-lawyers', { method: 'GET' }),
-  getById: (id: string) => apiCall(`/api/lawyers/${id}`, { method: 'GET' }),
-  create: (data: any) => apiCall('/api/lawyers', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: string, data: any) => apiCall(`/api/lawyers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id: string) => apiCall(`/api/lawyers/${id}`, { method: 'DELETE' }),
-  approve: (id: string, data?: any) => apiCall(`/api/approve-lawyer/${id}`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
-  reject: (id: string, data?: any) => apiCall(`/api/reject-lawyer/${id}`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
-};
-
-// Citizens API
-export const citizensAPI = {
-  getAll: () => apiCall('/api/citizens', { method: 'GET' }),
-  getById: (id: string) => apiCall(`/api/citizens/${id}`, { method: 'GET' }),
-  create: (data: any) => apiCall('/api/citizens', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: string, data: any) => apiCall(`/api/citizens/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id: string) => apiCall(`/api/citizens/${id}`, { method: 'DELETE' }),
-};
-
-// Auth API
+// ── Auth API ──────────────────────────────────────────────────────────────────
 export const authAPI = {
-  signup: (data: any) => apiCall('/api/signup', { method: 'POST', body: JSON.stringify(data) }),
+  login: (email: string, password: string) =>
+    apiCall('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
 };
 
-// Stats API
-export const statsAPI = {
-  getStats: () => apiCall('/api/stats', { method: 'GET' }),
+// ── Admin Consolidated API ────────────────────────────────────────────────────
+// This matches the expectations of useProfiles.ts and useData.js
+export const adminAPI = {
+  getStats: () => apiCall('/api/admin/stats', { method: 'GET' }),
+  getLogs: (page = 1) => apiCall('/api/admin/logs', { method: 'GET', params: { page } }),
+  getUsers: (page = 1) => apiCall('/api/admin/users', { method: 'GET', params: { page } }),
+  updateStatus: (id: string, status: 'active' | 'suspended') =>
+    apiCall(`/api/admin/users/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  deleteUser: (id: string) => apiCall(`/api/admin/users/${id}`, { method: 'DELETE' }),
+  verifyLawyer: (id: string, action: 'verify' | 'reject' | 'revoke') =>
+    apiCall(`/api/admin/lawyers/${id}/verify`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action }),
+    }),
 };
 
-// Chat API
+// ── Compatibility Exports ─────────────────────────────────────────────────────
+export const statsAPI = { getStats: adminAPI.getStats };
+export const logsAPI = { getLogs: adminAPI.getLogs };
+export const citizensAPI = {
+  getAll: adminAPI.getUsers,
+  getById: (id: string) => adminAPI.getUsers(1), // Fallback
+  updateStatus: adminAPI.updateStatus,
+  delete: adminAPI.deleteUser,
+};
+export const lawyersAPI = {
+  getAll: (page = 1) =>
+    adminAPI.getUsers(page).then((data: any) => ({
+      ...data,
+      users: data.users?.filter((u: any) => u.role === 'lawyer') ?? [],
+    })),
+  verify: (id: string) => adminAPI.verifyLawyer(id, 'verify'),
+  reject: (id: string) => adminAPI.verifyLawyer(id, 'reject'),
+  revoke: (id: string) => adminAPI.verifyLawyer(id, 'revoke'),
+  delete: adminAPI.deleteUser,
+};
+
+export const casesAPI = {
+  getAll: () => apiCall('/api/cases', { method: 'GET' }),
+};
+
 export const chatAPI = {
-  sendMessage: (data: any) => apiCall('/api/chat', { method: 'POST', body: JSON.stringify(data) }),
+  sendMessage: (data: any) =>
+    apiCall('/api/chat', { method: 'POST', body: JSON.stringify(data) }),
 };
 
+export { API_BASE_URL };
 export default apiCall;

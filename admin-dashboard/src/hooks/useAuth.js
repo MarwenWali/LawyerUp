@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authAPI } from '../lib/api.js';
+import { authAPI } from '@/lib/api';
 import { readAuth, writeAuth, clearAuth } from '../lib/storage.js';
 
 const AUTH_EVENT = 'lawyerup_auth_changed';
@@ -11,7 +11,10 @@ export function useAuth() {
   useEffect(() => {
     const sync = () => {
       const auth = readAuth();
-      setUser(auth?.user ?? null);
+      const raw = auth?.user ?? null;
+      const u =
+        raw && !raw.full_name && raw.name ? { ...raw, full_name: raw.name } : raw;
+      setUser(u);
       setLoading(false);
     };
     sync();
@@ -23,14 +26,18 @@ export function useAuth() {
     const res = await authAPI.login(email, password);
     if (!res?.token || !res?.user) throw new Error('Invalid response from server');
     if (res.user.role !== 'admin') throw new Error('Admin account required. Access denied.');
+    const normalizedUser = {
+      ...res.user,
+      full_name: res.user.full_name ?? res.user.name,
+    };
     writeAuth({
       token: res.token,
-      user: res.user,
+      user: normalizedUser,
       supabaseSession: res.supabaseSession || null,
     });
-    setUser(res.user);
+    setUser(normalizedUser);
     window.dispatchEvent(new Event(AUTH_EVENT));
-    return res.user;
+    return normalizedUser;
   };
 
   const signOut = () => {

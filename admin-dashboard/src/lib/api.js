@@ -1,6 +1,10 @@
 import { getToken } from './storage.js';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// In dev, use same-origin + Vite proxy so API calls work when opening the app via LAN IP or localhost.
+export const API_BASE_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_URL?.replace(/\/$/, '') || 'http://localhost:3000');
+const BASE_URL = API_BASE_URL;
 
 async function request(endpoint, options = {}) {
   const { body, method = 'GET', ...rest } = options;

@@ -32,10 +32,9 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const [initialMessagesLoaded, setInitialMessagesLoaded] = useState(false);
 
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.conversation_id === selectedConversationId) || null,
-    [conversations, selectedConversationId]
-  );
+  const selectedConversation = useMemo(() => {
+    return conversations.find((c) => c.id === selectedConversationId) || null;
+  }, [conversations, selectedConversationId]);
 
   const loadLawyers = useCallback(async () => {
     try {
@@ -58,8 +57,8 @@ export default function Messages() {
       const payload = await messagingAPI.listConversations('admin_lawyer');
       const rows = Array.isArray(payload?.conversations) ? payload.conversations : [];
       setConversations(rows);
-      if (!selectedConversationId && rows[0]?.conversation_id) {
-        setSelectedConversationId(rows[0].conversation_id);
+      if (!selectedConversationId && rows[0]?.id) {
+        setSelectedConversationId(rows[0].id);
       }
     } catch (error) {
       if (!silent) {
@@ -206,22 +205,23 @@ export default function Messages() {
               <div className="text-sm text-gray-400">No conversations yet</div>
             ) : conversations.map((conv) => (
               <button
-                key={conv.conversation_id}
-                onClick={() => setSelectedConversationId(conv.conversation_id)}
+                key={conv.id}
+                onClick={() => setSelectedConversationId(conv.id)}
                 className="w-full text-left rounded-xl border px-3 py-3 transition"
                 style={{
-                  borderColor: selectedConversationId === conv.conversation_id ? '#D4A03C' : '#E5E7EB',
-                  backgroundColor: selectedConversationId === conv.conversation_id ? 'rgba(212,160,60,0.12)' : '#fff',
+                  borderColor: selectedConversationId === conv.id ? '#D4A03C' : '#E5E7EB',
+                  backgroundColor: selectedConversationId === conv.id ? 'rgba(212,160,60,0.12)' : '#fff',
                 }}
               >
                 <p className="text-xs text-gray-500">
-                  {conv.other_participant_role === 'lawyer' ? 'Lawyer' : 'Participant'} {shortId(conv.other_participant_id)}
+                  {conv.other_participant?.role === 'lawyer' ? 'Lawyer' : 'Participant'}{' '}
+                  {shortId(conv.other_participant?.id)}
                 </p>
                 <p className="text-sm font-medium text-gray-800 mt-0.5 line-clamp-1">
-                  {conv.last_message || 'No messages yet'}
+                  {conv.last_message_preview || conv.last_message?.content || 'No messages yet'}
                 </p>
                 <div className="mt-1 flex items-center justify-between">
-                  <span className="text-[11px] text-gray-400">{formatTime(conv.last_message_at || conv.updated_at)}</span>
+                  <span className="text-[11px] text-gray-400">{formatTime(conv.last_message_at || conv.created_at)}</span>
                   {Number(conv.unread_count || 0) > 0 && (
                     <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#14213D', color: '#fff' }}>
                       {conv.unread_count}
@@ -243,7 +243,7 @@ export default function Messages() {
             <>
               <div className="px-5 py-4 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-800">
-                  {selectedConversation?.other_participant_role === 'lawyer' ? 'Lawyer Conversation' : 'Conversation'}
+                  {selectedConversation?.other_participant?.role === 'lawyer' ? 'Lawyer Conversation' : 'Conversation'}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">ID: {selectedConversationId}</p>
               </div>

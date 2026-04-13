@@ -340,10 +340,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   mineRow: {
+  mineRow: {
     justifyContent: 'flex-end',
   },
   theirRow: {
     justifyContent: 'flex-start',
+  },
   },
   msgBubble: {
     maxWidth: '84%',

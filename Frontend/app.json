@@ -1,7 +1,6 @@
 {
   "expo": {
     "name": "LawyerUp",
-<<<<<<< HEAD
     "slug": "lawyerup",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,6 +19,8 @@
     },
     "android": {
       "package": "com.lawyerup",
+      "softwareKeyboardLayoutMode": "resize",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "backgroundColor": "#14213D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -46,32 +47,3 @@
     }
   }
 }
-=======
-    "slug": "LawyerUp",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "softwareKeyboardLayoutMode": "resize",
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
-  }
-}
->>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2

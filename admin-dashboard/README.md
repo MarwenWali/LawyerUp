@@ -100,7 +100,8 @@ Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and 
 
 Yes, you can!
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+To connect a domain, navigate to Project > Settings > Domains and## Local Setup
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
->>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
+1. Copy `.env.example` to `.env`.
+2. Install dependencies: `npm install`.
+3. Start development: `npm run dev`.

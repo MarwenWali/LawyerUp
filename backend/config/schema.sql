@@ -316,6 +316,27 @@ ALTER TABLE messages ALTER COLUMN case_id DROP NOT NULL;
 
 DO $$
 BEGIN
+  -- Only patch legacy case-messages schema. If conversation_id exists, this is the new Supabase messaging table.
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'conversation_id'
+  ) THEN
+    -- Skip if already handled by the above ALTERs or if this is the new schema
+    NULL;
+  END IF;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -330,6 +351,7 @@ END $$;
 
 DO $$
 BEGIN
+  -- Legacy case-messages backfill only.
   IF EXISTS (
     SELECT 1
     FROM information_schema.columns
@@ -453,18 +475,32 @@ ALTER TABLE reviews
 
 DO $$
 BEGIN
-  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
-  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-  ALTER TABLE messages
-    ADD CONSTRAINT messages_case_id_fkey
-    FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
-  ALTER TABLE messages
-    ADD CONSTRAINT messages_conversation_id_fkey
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE NOT VALID;
-  ALTER TABLE messages
-    ADD CONSTRAINT messages_sender_id_fkey
-    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'messages'
+      AND column_name = 'conversation_id'
+  ) THEN
+    -- Supabase conversation messaging table uses auth.users ids.
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_sender_id_fkey
+      FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
+  ELSE
+    -- Legacy case-messages table uses app users ids.
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_case_id_fkey
+      FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE NOT VALID;
+    ALTER TABLE messages
+      ADD CONSTRAINT messages_sender_id_fkey
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
+  END IF;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
@@ -544,6 +580,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Backward compatibility for drifted chat tables missing defaults/constraints.
+ALTER TABLE chat_sessions ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+ALTER TABLE chat_messages ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+ALTER TABLE chat_sessions DROP CONSTRAINT IF EXISTS chat_sessions_user_id_fkey;
+ALTER TABLE chat_sessions
+  ADD CONSTRAINT chat_sessions_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
 
 CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);

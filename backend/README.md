@@ -10,6 +10,7 @@ Backend API for LawyerUp.
 - A Supabase project
 
 ### 1. Install
+<<<<<<< HEAD
 =======
 # LawyerUp Admin Dashboard
 
@@ -42,6 +43,12 @@ npm install
 ```
 
 <<<<<<< HEAD
+=======
+```bash
+npm install
+```
+
+>>>>>>> f78499d236a620a1824264420951559984134cfa
 ### 2. Configure environment
 Create `backend/.env` from `backend/.env.example` and set at least:
 
@@ -67,6 +74,7 @@ npm run db:seed
 ```
 
 ### 4. Start API
+<<<<<<< HEAD
 =======
 3. Start the server:
 ```bash
@@ -84,12 +92,22 @@ npm run dev
 ```
 
 <<<<<<< HEAD
+=======
+```bash
+npm run dev
+```
+
 ## Scripts
 - `npm run dev` - Start with nodemon
 - `npm start` - Start server
 - `npm run db:migrate` - Apply schema from `config/schema.sql`
 - `npm run db:seed` - Insert demo data
 - `npm run db:reset` - Drop tables (destructive)
+
+### Database Management
+- `npm run db:reset`: Drop all tables and recreate them.
+- `npm run db:migrate`: Run the schema script to create/patch tables.
+- `npm run db:seed`: Populate the database with test data.
 
 ## Database Connection Priority
 1. `SUPABASE_DB_URL`
@@ -111,6 +129,7 @@ Use JWT Bearer token:
 ```http
 Authorization: Bearer <token>
 ```
+<<<<<<< HEAD
 =======
 ## API Endpoints
 
@@ -196,3 +215,5 @@ For production deployment:
 - Lawyer profile editing
 - Suspension/ban functionality
 >>>>>>> ac06b9d385fe69f171134b1ac0df934904a576d2
+=======
+>>>>>>> f78499d236a620a1824264420951559984134cfa
