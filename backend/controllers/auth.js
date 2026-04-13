@@ -77,6 +77,31 @@ export async function register(req, res) {
     await client.query('COMMIT');
     authUserForCleanup = null;
 
+    // Send automatic welcome message to lawyers
+    if (role === 'lawyer') {
+      try {
+        const adminResult = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+        if (adminResult.rows.length > 0) {
+          const adminId = adminResult.rows[0].id;
+          const convResult = await pool.query(
+            `INSERT INTO conversations (citizen_id, lawyer_id, type)
+             VALUES ($1, $2, 'admin_lawyer')
+             ON CONFLICT (citizen_id, lawyer_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+             RETURNING id`,
+            [adminId, user.id]
+          );
+          const convId = convResult.rows[0].id;
+          await pool.query(
+            `INSERT INTO messages (conversation_id, sender_id, content)
+             VALUES ($1, $2, $3)`,
+            [convId, adminId, 'Welcome to the team! If you have any questions just send a message.']
+          );
+        }
+      } catch (msgError) {
+        console.error('Failed to send welcome message:', msgError);
+      }
+    }
+
     const shouldIssueToken = user.role !== 'lawyer' && user.is_verified && user.status === 'active';
     const response = {
       message: role === 'lawyer' ? 'Registration submitted for verification' : 'Registration successful',

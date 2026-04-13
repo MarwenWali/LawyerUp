@@ -152,8 +152,8 @@ export async function createConversationMessage({
 export async function getConversationMessages(req, res) {
   try {
     const currentRole = normalizeRoleLabel(req.user.role);
-    if (!['citizen', 'lawyer'].includes(currentRole)) {
-      return res.status(403).json({ error: 'Only citizens and lawyers can view messages' });
+    if (!['citizen', 'lawyer', 'admin'].includes(currentRole)) {
+      return res.status(403).json({ error: 'Only citizens, lawyers, and admins can view messages' });
     }
 
     const conversation = await ensureConversationAccess(req.params.id, req.user.id);
@@ -215,8 +215,8 @@ export async function getConversationMessages(req, res) {
 export async function sendConversationMessage(req, res) {
   try {
     const currentRole = normalizeRoleLabel(req.user.role);
-    if (!['citizen', 'lawyer'].includes(currentRole)) {
-      return res.status(403).json({ error: 'Only citizens and lawyers can send messages' });
+    if (!['citizen', 'lawyer', 'admin'].includes(currentRole)) {
+      return res.status(403).json({ error: 'Only citizens, lawyers, and admins can send messages' });
     }
 
     const io = req.app.get('io');
@@ -230,9 +230,10 @@ export async function sendConversationMessage(req, res) {
 
     return res.status(201).json({ message });
   } catch (error) {
-    const status = error.status || 500;
     console.error('sendConversationMessage error:', error);
-    return res.status(status).json({ error: error.message || 'Failed to send message' });
+    const status = error.status || 500;
+    const message = error.message || 'Failed to send message';
+    return res.status(status).json({ error: message, details: error.message });
   }
 }
 
