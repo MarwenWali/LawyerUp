@@ -134,6 +134,7 @@ export const chatApi = {
   updateTitle:   (id, title)      => api.patch(`/api/chat/sessions/${id}/title`, { title }),
   getMessages:   (id)             => api.get(`/api/chat/sessions/${id}/messages`),
   saveMessages:  (id, messages)   => api.post(`/api/chat/sessions/${id}/messages`, { messages }),
+  askAssistant:  (id, content)    => api.post(`/api/chat/sessions/${id}/reply`, { content }),
 };
 
 // Admin functionality has been moved to the web dashboard (admin-dashboard/).

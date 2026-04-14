@@ -1,50 +1,52 @@
 # LawyerUp
 
-A legal platform connecting users with lawyers in Tunisia.
+LawyerUp is a legal platform that connects users with lawyers in Tunisia.
 
 ## Project Structure
 
-```
+```text
 LawyerUp/
-|-- backend/          # Node.js + Express REST API (port 3000)
-|-- Frontend/         # React Native / Expo mobile app
-|-- admin-dashboard/  # Vite + React web admin panel (port 8080)
+|- backend/          Node.js + Express API (port 3000)
+|- Frontend/         Expo React Native mobile app
+|- admin-dashboard/  Vite React admin web app (port 5173)
+|- ai_iss/           Python AI assistant runtime
 ```
 
 ## Prerequisites
 
-- Node.js v18+
-- Supabase project (for managed Postgres)
-- Expo CLI (`npm install -g expo-cli`) for mobile app
+- Node.js 18+
+- Python 3.10+ (for `ai_iss`)
+- A Supabase project
 
-## 1. Backend Setup
+## Quick Start (Recommended)
+
+### 1) Backend
 
 ```bash
 cd backend
 npm install
 ```
 
-Create `backend/.env` from `backend/.env.example` and configure:
+Copy environment file and configure values:
 
-```env
-# Server
-PORT=3000
-NODE_ENV=development
-
-# Supabase Postgres (recommended)
-SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:6543/postgres
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-# JWT
-JWT_SECRET=your_super_secret_jwt_key
+```bash
+cp .env.example .env
 ```
 
-Run migrations and seed demo data:
+Required variables in `backend/.env`:
+
+- `SUPABASE_DB_URL`
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `JWT_SECRET`
+- `AI_ENGINE_URL` (use `http://localhost:8000` for local AI service)
+
+Apply database setup:
 
 ```bash
 npm run db:migrate
+npm run supabase:migrate
 npm run db:seed
 ```
 
@@ -54,19 +56,28 @@ Start backend:
 npm run dev
 ```
 
-API: `http://localhost:3000`
-
-## 2. Admin Dashboard
+### 2) AI Service (required for AI assistant chat)
 
 ```bash
-cd admin-dashboard
-npm install
-npm run dev
+cd ai_iss
+python -m venv mistral_env
+source mistral_env/Scripts/activate
+pip install -r requirements.txt
+PYTHONUTF8=1 uvicorn api_server:app --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8080`.
+If using PowerShell instead of Git Bash:
 
-## 3. Mobile App (Frontend)
+```powershell
+cd ai_iss
+python -m venv mistral_env
+.\mistral_env\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:PYTHONUTF8=1
+uvicorn api_server:app --host 0.0.0.0 --port 8000
+```
+
+### 3) Mobile App (Frontend)
 
 ```bash
 cd Frontend
@@ -74,25 +85,56 @@ npm install
 npm start
 ```
 
-If testing on a physical device, set API URL to your LAN IP (not `localhost`).
+Optional for tunnel/dev network:
+
+- Set `EXPO_PUBLIC_API_URL` if backend is not reachable at local host IP.
+- Keep `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` configured.
+
+### 4) Admin Dashboard
+
+```bash
+cd admin-dashboard
+npm install
+npm run dev
+```
+
+Open: `http://localhost:5173`
+
+## Run Order
+
+Start services in this order:
+
+1. Backend (`backend`)
+2. AI runtime (`ai_iss`)
+3. Frontend (`Frontend`)
+4. Admin dashboard (`admin-dashboard`, optional)
 
 ## Useful Backend Scripts
 
-- `npm run db:migrate` - Apply schema migrations
-- `npm run db:seed` - Seed demo users and cases
-- `npm run db:reset` - Drop/recreate DB tables (destructive)
-- `npm run dev` - Start backend with nodemon
-- `npm start` - Start backend in normal mode
+- `npm run dev` - start backend with nodemon
+- `npm start` - start backend in normal mode
+- `npm run db:migrate` - apply backend schema SQL
+- `npm run supabase:migrate` - apply Supabase messaging migrations
+- `npm run db:seed` - insert demo data
+- `npm run db:reset` - destructive reset
 
 ## Troubleshooting
 
-Backend cannot connect to DB:
-- Verify `SUPABASE_DB_URL` in `backend/.env`.
-- Keep `DB_SSL=true` for Supabase (default in `.env.example`).
+### Failed to create/send chat messages
 
-Port 3000 already in use:
+Run:
+
 ```bash
-# Windows
-netstat -ano | findstr :3000
-taskkill /PID <pid> /F
+cd backend
+npm run db:migrate
+npm run supabase:migrate
 ```
+
+### AI assistant unavailable
+
+Make sure both are running:
+
+1. `backend` API on port `3000`
+2. `ai_iss` FastAPI on port `8000`
+
+And verify `AI_ENGINE_URL=http://localhost:8000` in `backend/.env`.

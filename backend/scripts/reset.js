@@ -12,7 +12,7 @@ async function reset() {
       DROP TABLE IF EXISTS lawyer_profiles CASCADE;
       DROP TABLE IF EXISTS users CASCADE;
       DROP TABLE IF EXISTS guest_prompts CASCADE;
-      DROP EXTENSION IF EXISTS "uuid-ossp";
+      DROP EXTENSION IF EXISTS "uuid-ossp" CASCADE;
     `);
 
     console.log('✅ Database reset completed!');

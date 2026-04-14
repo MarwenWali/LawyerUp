@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
-import { getSessions, createSession, updateSessionTitle, deleteSession, getMessages, saveMessages } from '../controllers/chat.js';
+import { getSessions, createSession, updateSessionTitle, deleteSession, getMessages, saveMessages, generateReply } from '../controllers/chat.js';
 
 const router = express.Router();
 router.use(authenticateToken);
@@ -11,5 +11,6 @@ router.patch('/sessions/:id/title',      updateSessionTitle);
 router.delete('/sessions/:id',           deleteSession);
 router.get('/sessions/:id/messages',     getMessages);
 router.post('/sessions/:id/messages',    saveMessages);
+router.post('/sessions/:id/reply',       generateReply);
 
 export default router;

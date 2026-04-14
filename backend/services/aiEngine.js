@@ -11,6 +11,39 @@
 
 const AI_ENGINE_URL = process.env.AI_ENGINE_URL || 'http://localhost:8000';
 
+async function postToAI(path, payload) {
+  const controller = new AbortController();
+  const timeoutMs = Number(process.env.AI_ENGINE_TIMEOUT_MS || 45000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${AI_ENGINE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload || {}),
+      signal: controller.signal,
+    });
+
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+
+    if (!response.ok) {
+      const message = data?.error || data?.message || `AI engine request failed (${response.status})`;
+      throw new Error(message);
+    }
+
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Send a user message and conversation history to the AI engine
  * and return the AI's response text.
@@ -21,8 +54,18 @@ const AI_ENGINE_URL = process.env.AI_ENGINE_URL || 'http://localhost:8000';
  * @returns {Promise<string>} - The AI response text
  */
 export async function getAIResponse(userMessage, history = [], context = {}) {
-  // TODO: implement when ai-engine is ready
-  throw new Error('AI Engine not yet connected');
+  const payload = await postToAI('/v1/reply', {
+    message: userMessage,
+    history,
+    context,
+  });
+
+  const text = String(payload?.response || '').trim();
+  if (!text) {
+    throw new Error('AI engine returned an empty response');
+  }
+
+  return text;
 }
 
 /**
@@ -32,8 +75,7 @@ export async function getAIResponse(userMessage, history = [], context = {}) {
  * @returns {Promise<object>} - { summary, suggestedLawyerSpecialization, urgencyLevel }
  */
 export async function analyzeCase(caseData) {
-  // TODO: implement when ai-engine is ready
-  throw new Error('AI Engine not yet connected');
+  return postToAI('/v1/analyze-case', { case_data: caseData });
 }
 
 /**
@@ -44,6 +86,6 @@ export async function analyzeCase(caseData) {
  * @returns {Promise<string[]>} - Ordered array of lawyer IDs
  */
 export async function matchLawyers(query, lawyers) {
-  // TODO: implement when ai-engine is ready
-  throw new Error('AI Engine not yet connected');
+  const payload = await postToAI('/v1/match-lawyers', { query, lawyers });
+  return Array.isArray(payload?.lawyer_ids) ? payload.lawyer_ids : [];
 }
