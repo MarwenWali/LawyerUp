@@ -338,6 +338,7 @@ const styles = StyleSheet.create({
   },
   msgRow: {
     flexDirection: 'row',
+    paddingHorizontal: 4,
   },
   mineRow: {
     justifyContent: 'flex-end',

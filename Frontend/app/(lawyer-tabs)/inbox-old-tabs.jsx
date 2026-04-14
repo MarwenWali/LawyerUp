@@ -22,8 +22,14 @@ import {
   isAdminConversation,
   hasAdminConversation,
   sortConversationsWithAdminPin,
+  getRoleLabel,
   getInitials as getInitialsFromSorter,
 } from '@/utils/conversationSorter';
+
+const TABS = [
+  { key: 'admin_lawyer', label: 'Admin Chat' },
+  { key: 'lawyer_user', label: 'Client Chats' },
+];
 
 function formatTimestamp(isoDate) {
   if (!isoDate) return '';
@@ -38,6 +44,16 @@ function formatTimestamp(isoDate) {
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+function getInitials(value) {
+  return String(value || '?')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+}
+
 function normalizeBackendConversation(conversation) {
   const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
   const title = participant.name || participant.full_name || 'Conversation';
@@ -45,21 +61,9 @@ function normalizeBackendConversation(conversation) {
   return {
     ...conversation,
     conversation_id: conversation.id,
-    source: 'backend',
     other_participant_name: title,
     other_participant_role: participant.role || 'citizen',
     last_message: conversation.last_message?.content || conversation.last_message_preview || '',
-    last_message_at: conversation.last_message_at || conversation.created_at,
-    unread_count: Number(conversation.unread_count || 0),
-  };
-}
-
-function normalizeAdminConversation(conversation) {
-  return {
-    ...conversation,
-    source: 'legacy',
-    conversation_id: conversation.conversation_id || conversation.id,
-    other_participant_role: 'admin',
     last_message_at: conversation.last_message_at || conversation.created_at,
     unread_count: Number(conversation.unread_count || 0),
   };
@@ -170,70 +174,28 @@ export default function LawyerInboxPage() {
     typingByConversation: backendTypingByConversation,
   } = useSocket();
 
+  const [activeTab, setActiveTab] = useState('admin_lawyer');
   const [adminRows, setAdminRows] = useState([]);
-  const [combinedLoading, setCombinedLoading] = useState(true);
-  const [combinedRefreshing, setCombinedRefreshing] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(true);
+  const [adminRefreshing, setAdminRefreshing] = useState(false);
+  const [backendLoading, setBackendLoading] = useState(false);
+  const [backendRefreshing, setBackendRefreshing] = useState(false);
   const [legacyTypingByConversation, setLegacyTypingByConversation] = useState({});
   const [startingAdminChat, setStartingAdminChat] = useState(false);
   const typingTimeoutsRef = useRef({});
   const refreshTimeoutRef = useRef(null);
   const loadVersionRef = useRef(0);
 
-  // Normalize backend conversations
   const backendRows = useMemo(
-    () => backendConversations
-      .map(normalizeBackendConversation)
-      .filter(conv => {
-        // Exclude admin conversations from backend (only get them from legacy API)
-        const role = conv.other_participant_role || 'unknown';
-        return role !== 'admin';
-      }),
+    () => backendConversations.map(normalizeBackendConversation),
     [backendConversations]
   );
 
-  // Combine all conversations from both sources
-  const allConversations = useMemo(() => {
-    const combined = [...adminRows, ...backendRows];
-    
-    // Deduplicate - prioritize legacy admin, then by conversation_id
-    const adminConvs = combined.filter(isAdminConversation);
-    const clientConvs = combined.filter(conv => !isAdminConversation(conv));
-    
-    // Keep only ONE admin conversation (the first one from legacy)
-    const adminToKeep = adminConvs.length > 0 ? [adminConvs[0]] : [];
-    
-    // Deduplicate client conversations by ID
-    const clientSeen = new Set();
-    const deduplicatedClients = clientConvs.filter(conv => {
-      const id = conv.conversation_id || conv.id;
-      if (clientSeen.has(id)) return false;
-      clientSeen.add(id);
-      return true;
-    });
-    
-    return [...adminToKeep, ...deduplicatedClients];
-  }, [adminRows, backendRows]);
-
-  // Sort with admin pinned to top
-  const sortedRows = useMemo(() => {
-    return sortConversationsWithAdminPin(allConversations);
-  }, [allConversations]);
-
-  // Check if admin conversation exists
-  const adminConvExists = useMemo(() => {
-    return hasAdminConversation(allConversations);
-  }, [allConversations]);
-
-  // Total unread count
-  const unreadTotal = useMemo(
-    () => sortedRows.reduce((sum, row) => sum + Number(row.unread_count || 0), 0),
-    [sortedRows]
-  );
-
-  // Combine typing indicators
-  const allTypingByConversation = useMemo(() => {
-    return { ...legacyTypingByConversation, ...backendTypingByConversation };
-  }, [legacyTypingByConversation, backendTypingByConversation]);
+  const isBackendTab = activeTab === 'lawyer_user';
+  const rows = isBackendTab ? backendRows : adminRows;
+  const typingByConversation = isBackendTab ? backendTypingByConversation : legacyTypingByConversation;
+  const loading = isBackendTab ? (backendLoading && backendRows.length === 0) : adminLoading;
+  const refreshing = isBackendTab ? backendRefreshing : adminRefreshing;
 
   const openBackendConversation = useCallback((conversation) => {
     const participant = conversation.other_participant || {};
@@ -256,50 +218,54 @@ export default function LawyerInboxPage() {
     });
   }, []);
 
-  // Load both admin and backend conversations simultaneously
-  const loadAllConversations = useCallback(async (isRefresh = false) => {
-    if (!user?.id) return;
+  const loadAdminConversations = useCallback(async (isRefresh = false) => {
+    if (!user?.id || isBackendTab) return;
     const loadVersion = ++loadVersionRef.current;
 
-    if (isRefresh) setCombinedRefreshing(true);
-    else setCombinedLoading(true);
+    if (isRefresh) setAdminRefreshing(true);
+    else setAdminLoading(true);
 
     try {
-      // Load both in parallel
-      const [adminPayload, backendSuccess] = await Promise.all([
-        messagingApi.listConversations('admin_lawyer').catch((err) => {
-          console.error('Admin load error:', err);
-          return { conversations: [] };
-        }),
-        refreshConversations().catch((err) => {
-          console.error('Backend load error:', err);
-          return false;
-        }),
-      ]);
-
+      const payload = await messagingApi.listConversations('admin_lawyer');
       if (loadVersion !== loadVersionRef.current) return;
-
-      // Update admin rows
-      const adminConvs = Array.isArray(adminPayload?.conversations)
-        ? adminPayload.conversations.map(normalizeAdminConversation)
-        : [];
-      setAdminRows(adminConvs);
+      setAdminRows(Array.isArray(payload?.conversations) ? payload.conversations : []);
     } catch (error) {
-      console.error('Combined inbox load error:', error);
-      Alert.alert('Messaging', error?.message || 'Failed to load conversations');
+      console.error('Admin inbox load error:', error);
+      Alert.alert('Messaging', error?.message || 'Failed to load admin conversations');
     } finally {
       if (loadVersion === loadVersionRef.current) {
-        setCombinedLoading(false);
-        setCombinedRefreshing(false);
+        setAdminLoading(false);
+        setAdminRefreshing(false);
       }
     }
-  }, [refreshConversations, user?.id]);
+  }, [isBackendTab, user?.id]);
 
-  // Initial load and setup listeners
+  const loadBackendConversations = useCallback(async (isRefresh = false) => {
+    if (!user?.id || !isBackendTab) return;
+
+    if (isRefresh) setBackendRefreshing(true);
+    else setBackendLoading(true);
+
+    try {
+      await refreshConversations();
+    } catch (error) {
+      console.error('Backend inbox load error:', error);
+      Alert.alert('Messaging', error?.message || 'Failed to load conversations');
+    } finally {
+      setBackendLoading(false);
+      setBackendRefreshing(false);
+    }
+  }, [isBackendTab, refreshConversations, user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
 
-    loadAllConversations(false);
+    if (activeTab === 'lawyer_user') {
+      loadBackendConversations(false);
+      return undefined;
+    }
+
+    loadAdminConversations(false);
 
     const scheduleRefresh = () => {
       if (refreshTimeoutRef.current) {
@@ -307,11 +273,10 @@ export default function LawyerInboxPage() {
       }
 
       refreshTimeoutRef.current = setTimeout(() => {
-        loadAllConversations(false).catch(() => {});
+        loadAdminConversations(false).catch(() => {});
       }, 220);
     };
 
-    // Listen for new messages
     const dataChannel = supabase
       .channel(`lawyer-inbox-sync-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
@@ -319,7 +284,6 @@ export default function LawyerInboxPage() {
       })
       .subscribe();
 
-    // Listen for typing indicators
     const typingChannel = supabase
       .channel('typing-indicators')
       .on('broadcast', { event: 'typing' }, ({ payload }) => {
@@ -346,9 +310,8 @@ export default function LawyerInboxPage() {
       })
       .subscribe();
 
-    // Periodic refresh
     const intervalId = setInterval(() => {
-      loadAllConversations(false).catch(() => {});
+      loadAdminConversations(false).catch(() => {});
     }, 8000);
 
     return () => {
@@ -359,14 +322,29 @@ export default function LawyerInboxPage() {
       supabase.removeChannel(typingChannel);
       clearInterval(intervalId);
     };
-  }, [loadAllConversations, user?.id]);
+  }, [activeTab, loadAdminConversations, loadBackendConversations, user?.id]);
+
+  const unreadTotal = useMemo(
+    () => rows.reduce((sum, row) => sum + Number(row.unread_count || 0), 0),
+    [rows]
+  );
+
+  // Check if an admin conversation already exists
+  const adminConvExists = useMemo(() => {
+    return hasAdminConversation(rows);
+  }, [rows]);
+
+  // Sort conversations with admin pinned to top
+  const sortedRows = useMemo(() => {
+    return sortConversationsWithAdminPin(rows);
+  }, [rows]);
 
   const startAdminConversation = useCallback(async () => {
     if (startingAdminChat) return;
     setStartingAdminChat(true);
 
     try {
-      // Check for existing admin conversation
+      // Check for an existing admin conversation first
       const existingPayload = await messagingApi.listConversations('admin_lawyer');
       const conversations = Array.isArray(existingPayload?.conversations)
         ? existingPayload.conversations
@@ -376,45 +354,40 @@ export default function LawyerInboxPage() {
       const existingId = existing?.conversation_id || existing?.id;
 
       if (existingId) {
+        setActiveTab('admin_lawyer');
         openLegacyConversation(existingId, 'Admin Team');
         return;
       }
 
-      // Create new admin conversation
+      // Start a new conversation with the admin
       const adminUser = await messagingApi.getFirstAdminUser();
       const createPayload = await messagingApi.createConversation('admin_lawyer', adminUser.id);
+      // Backend returns { conversation: { id, ... } }
       const conversationId = createPayload?.conversation?.id || createPayload?.id;
 
       if (!conversationId) {
-        throw new Error('Could not start admin conversation');
+        throw new Error('Could not start admin conversation — no ID returned');
       }
 
-      await loadAllConversations(false);
+      setActiveTab('admin_lawyer');
+      await loadAdminConversations(false);
       openLegacyConversation(conversationId, 'Admin Team');
     } catch (error) {
       Alert.alert('Messaging', error?.message || 'Failed to start admin chat');
     } finally {
       setStartingAdminChat(false);
     }
-  }, [loadAllConversations, openLegacyConversation, startingAdminChat]);
+  }, [loadAdminConversations, openLegacyConversation, startingAdminChat]);
 
   const renderItem = useCallback(({ item }) => {
-    const conversationId = item.conversation_id || item.id;
-    const isAdmin = isAdminConversation(item);
-    let title = '';
-    let avatarLabel = '';
-
-    if (item.source === 'backend') {
-      // Backend conversation (client chat)
+    if (isBackendTab) {
       const participant = item.other_participant || {};
-      title = participant.name || participant.full_name || 'Conversation';
-      avatarLabel = participant.initials || getInitialsFromSorter(title);
-
+      const title = participant.name || participant.full_name || 'Conversation';
       return (
         <InboxRow
           item={item}
           title={title}
-          avatarLabel={avatarLabel}
+          avatarLabel={participant.initials || getInitialsFromSorter(title)}
           preview={resolvePreview(item, Boolean(backendTypingByConversation[item.id]))}
           isTyping={Boolean(backendTypingByConversation[item.id])}
           C={C}
@@ -424,15 +397,15 @@ export default function LawyerInboxPage() {
       );
     }
 
-    // Legacy admin conversation
-    title = resolveAdminTitle(item);
-    avatarLabel = getInitialsFromSorter(title);
+    const title = resolveAdminTitle(item);
+    const conversationId = item.conversation_id || item.id;
+    const isAdmin = isAdminConversation(item);
 
     return (
       <InboxRow
         item={item}
         title={title}
-        avatarLabel={avatarLabel}
+        avatarLabel={getInitialsFromSorter(title)}
         preview={resolvePreview(item, Boolean(legacyTypingByConversation[conversationId]))}
         isTyping={Boolean(legacyTypingByConversation[conversationId])}
         C={C}
@@ -443,6 +416,7 @@ export default function LawyerInboxPage() {
   }, [
     C,
     backendTypingByConversation,
+    isBackendTab,
     legacyTypingByConversation,
     openBackendConversation,
     openLegacyConversation,
@@ -450,7 +424,6 @@ export default function LawyerInboxPage() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: C.border, backgroundColor: C.headerBg }]}>
         <View style={styles.headerTop}>
           <Text style={[styles.heading, { color: C.tint }]}>{t.inbox || 'Inbox'}</Text>
@@ -461,7 +434,24 @@ export default function LawyerInboxPage() {
           )}
         </View>
 
-        {!adminConvExists && (
+        <View style={[styles.tabsWrap, { backgroundColor: C.muted }]}>
+          {TABS.map((tab) => {
+            const active = activeTab === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                style={[styles.tab, active && { backgroundColor: C.card }]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Text style={[styles.tabText, { color: active ? C.foreground : C.mutedForeground }]}>
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {!adminConvExists && !isBackendTab && (
           <Pressable
             style={({ pressed }) => [
               styles.startAdminBtn,
@@ -481,20 +471,19 @@ export default function LawyerInboxPage() {
         )}
       </View>
 
-      {/* Content */}
-      {combinedLoading ? (
+      {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={C.accent} size="large" />
         </View>
-      ) : sortedRows.length === 0 ? (
+      ) : rows.length === 0 ? (
         <FlatList
           data={[]}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.emptyContent}
           refreshControl={
             <RefreshControl
-              refreshing={combinedRefreshing}
-              onRefresh={() => loadAllConversations(true)}
+              refreshing={refreshing}
+              onRefresh={() => (isBackendTab ? loadBackendConversations(true) : loadAdminConversations(true))}
               tintColor={C.accent}
             />
           }
@@ -503,7 +492,9 @@ export default function LawyerInboxPage() {
               <Ionicons name="chatbubble-ellipses-outline" size={44} color={C.mutedForeground} />
               <Text style={[styles.emptyTitle, { color: C.foreground }]}>No conversations yet</Text>
               <Text style={[styles.emptyText, { color: C.textSecondary }]}>
-                Your messages will appear here. Start chatting with support or awaiting client inquiries.
+                {isBackendTab
+                  ? 'Conversations will appear here once a citizen sends you a message.'
+                  : 'Conversations will appear here once admin messaging starts.'}
               </Text>
             </View>
           }
@@ -516,8 +507,8 @@ export default function LawyerInboxPage() {
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
-              refreshing={combinedRefreshing}
-              onRefresh={() => loadAllConversations(true)}
+              refreshing={refreshing}
+              onRefresh={() => (isBackendTab ? loadBackendConversations(true) : loadAdminConversations(true))}
               tintColor={C.accent}
             />
           }
@@ -555,6 +546,26 @@ const styles = StyleSheet.create({
   },
   totalBadgeText: {
     fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+
+  // ── Tabs ──
+  tabsWrap: {
+    borderRadius: 12,
+    padding: 4,
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+  },
+  tab: {
+    flex: 1,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+  },
+  tabText: {
+    fontSize: 13,
     fontFamily: 'Inter_600SemiBold',
   },
 

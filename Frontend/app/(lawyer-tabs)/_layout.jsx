@@ -17,17 +17,9 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>{t.home}</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="cases">
-        <Icon sf={{ default: "folder", selected: "folder.fill" }} />
-        <Label>{t.cases}</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="inbox">
         <Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} />
         <Label>{t.inbox || 'Inbox'}</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="requests">
-        <Icon sf={{ default: "envelope", selected: "envelope.fill" }} />
-        <Label>{t.requests || 'Requests'}</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
@@ -73,9 +65,12 @@ function ClassicTabLayout() {
       <Tabs.Screen name="index" options={{ title: t.home, tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} /> }} />
       <Tabs.Screen name="cases" options={{ title: t.cases, tabBarIcon: ({ color, size }) => <Ionicons name="folder" size={size} color={color} /> }} />
       <Tabs.Screen name="inbox" options={{ title: t.inbox || 'Inbox', tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} /> }} />
-      <Tabs.Screen name="inbox-chat" options={{ href: null }} />
       <Tabs.Screen name="requests" options={{ title: t.requests || 'Requests', tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
+      {/* Hide extra screens from tab bar */}
+      <Tabs.Screen name="inbox-chat" options={{ href: null }} />
+      <Tabs.Screen name="inbox-old-tabs" options={{ href: null }} />
+      <Tabs.Screen name="inbox-unified" options={{ href: null }} />
     </Tabs>
   );
 }
