@@ -59,7 +59,6 @@ function normalizeAdminConversation(conversation) {
     ...conversation,
     source: 'legacy',
     conversation_id: conversation.conversation_id || conversation.id,
-    other_participant_role: 'admin',
     last_message_at: conversation.last_message_at || conversation.created_at,
     unread_count: Number(conversation.unread_count || 0),
   };
@@ -181,37 +180,13 @@ export default function LawyerInboxPage() {
 
   // Normalize backend conversations
   const backendRows = useMemo(
-    () => backendConversations
-      .map(normalizeBackendConversation)
-      .filter(conv => {
-        // Exclude admin conversations from backend (only get them from legacy API)
-        const role = conv.other_participant_role || 'unknown';
-        return role !== 'admin';
-      }),
+    () => backendConversations.map(normalizeBackendConversation),
     [backendConversations]
   );
 
   // Combine all conversations from both sources
   const allConversations = useMemo(() => {
-    const combined = [...adminRows, ...backendRows];
-    
-    // Deduplicate - prioritize legacy admin, then by conversation_id
-    const adminConvs = combined.filter(isAdminConversation);
-    const clientConvs = combined.filter(conv => !isAdminConversation(conv));
-    
-    // Keep only ONE admin conversation (the first one from legacy)
-    const adminToKeep = adminConvs.length > 0 ? [adminConvs[0]] : [];
-    
-    // Deduplicate client conversations by ID
-    const clientSeen = new Set();
-    const deduplicatedClients = clientConvs.filter(conv => {
-      const id = conv.conversation_id || conv.id;
-      if (clientSeen.has(id)) return false;
-      clientSeen.add(id);
-      return true;
-    });
-    
-    return [...adminToKeep, ...deduplicatedClients];
+    return [...adminRows, ...backendRows];
   }, [adminRows, backendRows]);
 
   // Sort with admin pinned to top
