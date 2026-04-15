@@ -4,7 +4,13 @@ A fine-tuned language model specialized for understanding and responding to lega
 
 ## Overview
 
-This project fine-tunes a TinyLlama-1.1B model on Tunisian legal domain data to create a conversational AI assistant that understands:
+This project uses a **two-stage pipeline**:
+
+1. Stage-1 translator model converts Tunisian Darija/Arabizi into Modern Standard Arabic (MSA).
+2. Stage-2 legal model answers in Arabic based on Tunisian labor law.
+
+The assistant supports:
+
 - **Darija** (Tunisian Arabic) with transliteration: `chnowa 7a9i fil travail?`
 - **Modern Standard Arabic**: `ما هي حقوقي في العمل؟`
 - **French**: `Quels sont mes droits du travail?`
@@ -23,9 +29,14 @@ This project fine-tunes a TinyLlama-1.1B model on Tunisian legal domain data to 
 ```
 ai_iss/
 ├── config.py              # Training configuration & hyperparameters
-├── train.py               # Main training script
+├── prepare_two_stage_data.py # Split mixed data into stage-1 and stage-2 datasets
+├── train_translator.py    # Stage-1 translator training script
+├── train.py               # Stage-2 legal model training script
+├── train_two_stage.py     # Run full pipeline (data prep + both trainings)
+├── translator.py          # Stage-1 inference module
+├── evaluate_two_stage.py  # Separate evaluation for translation and legal relevance
 ├── inference.py           # Inference utilities for single model usage
-├── generator.py           # Answer generation module
+├── generator.py           # Stage-2 legal answer generation module
 ├── router.py              # Request routing & intent detection
 ├── app.py                 # Interactive CLI interface
 ├── test.py                # Comprehensive testing suite
@@ -45,6 +56,7 @@ ai_iss/
 ## Installation
 
 ### Prerequisites
+
 - Python 3.8+
 - CUDA 11.8+ (for GPU, optional)
 - 6GB+ VRAM (for RTX 3050+) or can run on CPU
@@ -75,23 +87,34 @@ pip install torch transformers datasets trl bitsandbytes
 
 ### 1. Train the Model
 
-Fine-tune on your Tunisian legal dataset:
+Train both stages on your Tunisian dataset:
 
 ```bash
 # Activate environment
 mistral_env\Scripts\Activate.ps1
 
-# Run training
+# Build stage datasets
+python prepare_two_stage_data.py
+
+# Train stage-1 translator (Tunisian -> MSA)
+python train_translator.py
+
+# Train stage-2 legal model (MSA -> legal answer)
 python train.py
+
+# Or run everything in one command
+python train_two_stage.py
 ```
 
 **Training will:**
-- Load dataset from `data/tunisian_legal.json`
-- Fine-tune TinyLlama using SFT (Supervised Fine-Tuning)
-- Save model to `./legal-model/`
+
+- Build `data/translator_train.json` and `data/legal_train_ar.json`
+- Fine-tune translator model and save it to `./translator-model/`
+- Fine-tune legal model and save it to `./legal-model/`
 - Save tensorboard logs to `./logs/`
 
 **Expected duration:**
+
 - RTX 3050: ~2-4 hours for 5 epochs
 - CPU: ~12-24 hours
 
@@ -104,9 +127,10 @@ python app.py
 ```
 
 **Example conversation:**
+
 ```
 أنت / You: chnowa 7a9i fil travail fi tounes?
-🤖 المساعد / Assistant: 
+🤖 المساعد / Assistant:
 في القانون التونسي... [response in Darija/Arabic]
 
 أنت / You: What about overtime?
@@ -124,6 +148,12 @@ python test.py
 
 # Interactive testing mode
 python test.py --interactive
+
+# Two-stage scoring (translation and legal relevance separately)
+python evaluate_two_stage.py
+
+# Sampled quick check (50 examples per stage)
+python evaluate_two_stage.py --limit 50
 ```
 
 ### 4. Dataset Analysis
@@ -160,6 +190,7 @@ The training data should be JSON with the following structure:
 ```
 
 **Key Points:**
+
 - `instruction`: System prompt (keep consistent)
 - `input`: Question in any supported language
 - `output`: Answer in the same language as input
@@ -235,6 +266,7 @@ model = BitsAndBytesConfig(
 ## Multilingual Support Detail
 
 ### Language Detection
+
 The system automatically detects and responds in the user's language:
 
 - **Darija Detection**: Numerals (7, 3, 2, etc.), French mixed in Arabic context
@@ -243,6 +275,7 @@ The system automatically detects and responds in the user's language:
 - **English Detection**: English vocabulary and ASCII
 
 ### Response Format
+
 ```
 ### Instruction:
 Answer in the same language as the user
@@ -274,6 +307,7 @@ test_queries = [
 ### Metrics
 
 The system evaluates based on:
+
 - ✓ Language preservation (response in same language)
 - ✓ Keyword presence (legal terms in response)
 - ✓ Response coherence (meaningful legal advice)
@@ -282,16 +316,19 @@ The system evaluates based on:
 ## Performance Notes
 
 ### Model Size
+
 - **Base Model**: TinyLlama-1.1B (475MB)
 - **Fine-tuned weights**: ~500MB additional
 - **Total VRAM needed**: 2-4GB (with quantization)
 
 ### Inference Speed
+
 - **GPU (RTX 3050)**: ~50-100 ms per token
 - **CPU**: ~200-500 ms per token
 - **Average response**: 3-5 seconds
 
 ### Training Efficiency
+
 - **Gradient Accumulation**: 4 steps (effective batch 16)
 - **Mixed Precision**: float16 on GPU
 - **Gradient Checkpointing**: Enabled for memory savings
@@ -300,6 +337,7 @@ The system evaluates based on:
 ## Troubleshooting
 
 ### Issue: CUDA Out of Memory
+
 ```python
 # Solution: Enable 4-bit quantization in train.py
 load_in_4bit = True
@@ -310,6 +348,7 @@ gradient_accumulation_steps = 8
 ```
 
 ### Issue: Model not loading
+
 ```bash
 # Check model directory exists
 ls legal-model/
@@ -323,6 +362,7 @@ mv legal-model models/legal-model
 ```
 
 ### Issue: Slow inference on CPU
+
 ```python
 # Use smaller max_tokens in generator.py
 generate_answer(text, max_tokens=128)  # Default is 256
@@ -384,6 +424,7 @@ This project and trained models are provided for educational and research purpos
 ## Support
 
 For issues or questions:
+
 1. Check the Troubleshooting section
 2. Verify dataset format with `validate_dataset()`
 3. Run `test.py` to verify model functionality

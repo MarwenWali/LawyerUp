@@ -1,0 +1,566 @@
+[
+  {
+    "input": "chnowa 7a9i fil travail fi tounes?",
+    "output": "ما هي حقوقي في العمل في تونس?"
+  },
+  {
+    "input": "najem n3amel contrat travail sans avocat?",
+    "output": "هل يمكنني أبرم عقد عمل العمل بدون محامي?"
+  },
+  {
+    "input": "شنية حقوقي كي نخدم بلا عقد؟",
+    "output": "ماذا حقوقي كي نخدم بلا عقد؟"
+  },
+  {
+    "input": "nheb na3ref chnowa 7a9i fil retraite",
+    "output": "أريد أعرف ما هي حقوقي في التقاعد"
+  },
+  {
+    "input": "شنية العقوبة إذا خالفت قانون الشغل؟",
+    "output": "ماذا العقوبة إذا خالفت قانون الشغل؟"
+  },
+  {
+    "input": "najem na3mel contrat sans avocat?",
+    "output": "هل يمكنني أبرم عقد عمل بدون محامي?"
+  },
+  {
+    "input": "شنية حقوقي إذا تسرحت من الخدمة؟",
+    "output": "ماذا حقوقي إذا تسرحت من العمل؟"
+  },
+  {
+    "input": "najem na5ou overtime?",
+    "output": "هل يمكنني آخذ الساعات الإضافية?"
+  },
+  {
+    "input": "شنية congé payé?",
+    "output": "ماذا إجازة مدفوعة?"
+  },
+  {
+    "input": "nheb na3ref chnowa retraite",
+    "output": "أريد أعرف ما هي التقاعد"
+  },
+  {
+    "input": "najem nst9il w chnowa يصير?",
+    "output": "هل يمكنني أستقيل و ما هي يصير?"
+  },
+  {
+    "input": "شنية حقوق العامل بلا عقد؟",
+    "output": "ماذا حقوق العامل بلا عقد؟"
+  },
+  {
+    "input": "chnowa يصير إذا ما خلصنيش خدمتي؟",
+    "output": "ما هي يصير إذا ما خلصنيش خدمتي؟"
+  },
+  {
+    "input": "najem na5ou droit mta3 chômage?",
+    "output": "هل يمكنني آخذ حق المتعلق ب بطالة?"
+  },
+  {
+    "input": "شنية مدة العمل القانونية؟",
+    "output": "ماذا مدة العمل القانونية؟"
+  },
+  {
+    "input": "najem n5dm overtime sans accord?",
+    "output": "هل يمكنني أعمل الساعات الإضافية بدون موافقة?"
+  },
+  {
+    "input": "شنية حقوق المرأة في الخدمة؟",
+    "output": "ماذا حقوق المرأة في العمل؟"
+  },
+  {
+    "input": "najem n5dm بلا CNSS?",
+    "output": "هل يمكنني أعمل بلا الضمان الاجتماعي?"
+  },
+  {
+    "input": "شنية CNSS؟",
+    "output": "ماذا الضمان الاجتماعي؟"
+  },
+  {
+    "input": "What is CNSS?",
+    "output": "What is الضمان الاجتماعي?"
+  },
+  {
+    "input": "najem نبدل خدمة بلا مشاكل؟",
+    "output": "هل يمكنني نبدل عمل بلا مشاكل؟"
+  },
+  {
+    "input": "شنية عقوبة العمل غير المصرح به؟",
+    "output": "ماذا عقوبة العمل غير المصرح به؟"
+  },
+  {
+    "input": "najem n7ot plainte contre boss?",
+    "output": "هل يمكنني أقدّم شكوى ضد صاحب العمل?"
+  },
+  {
+    "input": "najem نمشي للمحكمة كان boss ظلمني؟",
+    "output": "هل يمكنني نمشي للمحكمة كان صاحب العمل ظلمني؟"
+  },
+  {
+    "input": "شنية يصير إذا العقد فيه مشاكل؟",
+    "output": "ماذا يصير إذا العقد فيه مشاكل؟"
+  },
+  {
+    "input": "najem نبدل شروط العقد؟",
+    "output": "هل يمكنني نبدل شروط العقد؟"
+  },
+  {
+    "input": "شنية حقوقي إذا الشركة سكرت؟",
+    "output": "ماذا حقوقي إذا الشركة سكرت؟"
+  },
+  {
+    "input": "najem نرفض خدمة خطيرة؟",
+    "output": "هل يمكنني نرفض عمل خطيرة؟"
+  },
+  {
+    "input": "شنية تفقدية الشغل؟",
+    "output": "ماذا تفقدية الشغل؟"
+  },
+  {
+    "input": "najem ناخذ avocat؟",
+    "output": "هل يمكنني ناخذ محامي؟"
+  },
+  {
+    "input": "شنية يصير في المحكمة؟",
+    "output": "ماذا يصير في المحكمة؟"
+  },
+  {
+    "input": "najem نأجل المحكمة؟",
+    "output": "هل يمكنني نأجل المحكمة؟"
+  },
+  {
+    "input": "شنية الإثبات في النزاع؟",
+    "output": "ماذا الإثبات في النزاع؟"
+  },
+  {
+    "input": "boss يسبني في الخدمة، شنو نعمل؟",
+    "output": "صاحب العمل يسبني في العمل، ماذا نعمل؟"
+  },
+  {
+    "input": "ما خلصونيش overtime، شنوة نعمل؟",
+    "output": "ما خلصونيش الساعات الإضافية، ماذاة نعمل؟"
+  },
+  {
+    "input": "najem يطردوني بدون سبب؟",
+    "output": "هل يمكنني يطردوني بدون سبب؟"
+  },
+  {
+    "input": "boss ما يحبش يصرح بيا في CNSS",
+    "output": "صاحب العمل ما يحبش يصرح بيا في الضمان الاجتماعي"
+  },
+  {
+    "input": "شنية يصير إذا الخدمة بدون CNSS؟",
+    "output": "ماذا يصير إذا العمل بدون الضمان الاجتماعي؟"
+  },
+  {
+    "input": "najem نغيب على الخدمة؟",
+    "output": "هل يمكنني نغيب على العمل؟"
+  },
+  {
+    "input": "شنية يصير إذا ما عملتش notice؟",
+    "output": "ماذا يصير إذا ما عملتش مدة الإعلام؟"
+  },
+  {
+    "input": "boss يبدل شروط الخدمة فجأة",
+    "output": "صاحب العمل يبدل شروط العمل فجأة"
+  },
+  {
+    "input": "najem نطلب زيادة؟",
+    "output": "هل يمكنني نطلب زيادة؟"
+  },
+  {
+    "input": "شنية حقوقي في accident travail؟",
+    "output": "ماذا حقوقي في accident العمل؟"
+  },
+  {
+    "input": "najem نرفض contract فيه شروط ظالمة؟",
+    "output": "هل يمكنني نرفض contract فيه شروط ظالمة؟"
+  },
+  {
+    "input": "boss يضغط عليا باش نخدم ساعات زيادة",
+    "output": "صاحب العمل يضغط عليا باش نخدم ساعات زيادة"
+  },
+  {
+    "input": "najem ناخذ عطلة مرضية؟",
+    "output": "هل يمكنني ناخذ عطلة مرضية؟"
+  },
+  {
+    "input": "شنية يصير إذا سرقت الشركة فلوسي؟",
+    "output": "ماذا يصير إذا سرقت الشركة أموالي؟"
+  },
+  {
+    "input": "najem نخدم part-time في تونس؟",
+    "output": "هل يمكنني نخدم part-time في تونس؟"
+  },
+  {
+    "input": "شنية عقوبة التحرش في العمل؟",
+    "output": "ماذا عقوبة التحرش في العمل؟"
+  },
+  {
+    "input": "najem نبدل CNSS؟",
+    "output": "هل يمكنني نبدل الضمان الاجتماعي؟"
+  },
+  {
+    "input": "Can I change CNSS?",
+    "output": "Can I change الضمان الاجتماعي?"
+  },
+  {
+    "input": "Changer la CNSS",
+    "output": "Changer la الضمان الاجتماعي"
+  },
+  {
+    "input": "شنية يصير إذا ما عنديش CNSS سنوات؟",
+    "output": "ماذا يصير إذا ما عنديش الضمان الاجتماعي سنوات؟"
+  },
+  {
+    "input": "Missing CNSS contributions",
+    "output": "Missing الضمان الاجتماعي contributions"
+  },
+  {
+    "input": "Absence de cotisation CNSS",
+    "output": "Absence de cotisation الضمان الاجتماعي"
+  },
+  {
+    "input": "najem نوقف الخدمة فجأة؟",
+    "output": "هل يمكنني نوقف العمل فجأة؟"
+  },
+  {
+    "input": "boss يهددني بالطرد",
+    "output": "صاحب العمل يهددني بالطرد"
+  },
+  {
+    "input": "شنية يصير إذا الشركة مفلسة؟",
+    "output": "ماذا يصير إذا الشركة مفلسة؟"
+  },
+  {
+    "input": "najem ناخذ حقوقي الكل حتى بعد الاستقالة؟",
+    "output": "هل يمكنني ناخذ حقوقي الكل حتى بعد الاستقالة؟"
+  },
+  {
+    "input": "chneya nafeka",
+    "output": "ما هي حالتك أو ماذا يحدث معك"
+  },
+  {
+    "input": "kifeh ahwalek",
+    "output": "كيف حالك؟"
+  },
+  {
+    "input": "chnowa esmou hadha",
+    "output": "ما اسم هذا؟"
+  },
+  {
+    "input": "3andek flous?",
+    "output": "هل لديك مال؟"
+  },
+  {
+    "input": "nheb nom",
+    "output": "أريد النوم"
+  },
+  {
+    "input": "a3tini chwaya waqt",
+    "output": "أعطني بعض الوقت"
+  },
+  {
+    "input": "chniya hedhi",
+    "output": "ما هذا؟"
+  },
+  {
+    "input": "3lech sakt",
+    "output": "لماذا أنت صامت؟"
+  },
+  {
+    "input": "nheb nsefer",
+    "output": "أريد السفر"
+  },
+  {
+    "input": "3andi mouchkla",
+    "output": "لدي مشكلة"
+  },
+  {
+    "input": "sahbi",
+    "output": "يا صديقي"
+  },
+  {
+    "input": "brabi aawni",
+    "output": "من فضلك ساعدني"
+  },
+  {
+    "input": "nheb n3ref",
+    "output": "أريد أن أعرف"
+  },
+  {
+    "input": "chniya ra2yek",
+    "output": "ما رأيك؟"
+  },
+  {
+    "input": "3lech ma jawbtech",
+    "output": "لماذا لم تجب؟"
+  },
+  {
+    "input": "ena ta3ban",
+    "output": "أنا متعب"
+  },
+  {
+    "input": "nheb nرتاح",
+    "output": "أريد أن أرتاح"
+  },
+  {
+    "input": "chniya hal el moshkla",
+    "output": "ما هي المشكلة؟"
+  },
+  {
+    "input": "asma3ni",
+    "output": "اسمعني"
+  },
+  {
+    "input": "3aych khouya",
+    "output": "شكراً أخي"
+  },
+  {
+    "input": "3andi stress",
+    "output": "لدي ضغط نفسي"
+  },
+  {
+    "input": "nheb nرتاح شوية",
+    "output": "أريد أن أرتاح قليلاً"
+  },
+  {
+    "input": "rani mta3ab barcha",
+    "output": "أنا متعب جداً"
+  },
+  {
+    "input": "mouch normal",
+    "output": "هذا غير طبيعي"
+  },
+  {
+    "input": "nheb nsafar برا",
+    "output": "أريد السفر إلى الخارج"
+  },
+  {
+    "input": "3andi exam ghodwa",
+    "output": "لدي امتحان غداً"
+  },
+  {
+    "input": "rani khayef",
+    "output": "أنا خائف"
+  },
+  {
+    "input": "nheb nbadel hathi",
+    "output": "أريد تغيير هذا"
+  },
+  {
+    "input": "chniya solution",
+    "output": "ما هو الحل؟"
+  },
+  {
+    "input": "3awni barka",
+    "output": "ساعدني فقط"
+  },
+  {
+    "input": "ma nجمش نفهم",
+    "output": "لا أستطيع الفهم"
+  },
+  {
+    "input": "rani mabsout",
+    "output": "أنا مرتاح"
+  },
+  {
+    "input": "nheb nخرج",
+    "output": "أريد الخروج"
+  },
+  {
+    "input": "3lech hakka",
+    "output": "لماذا هكذا؟"
+  },
+  {
+    "input": "sahbi aatini rayek",
+    "output": "صديقي أعطني رأيك"
+  },
+  {
+    "input": "nheb nbadl khdema",
+    "output": "أريد تغيير العمل"
+  },
+  {
+    "input": "chniya na3mel",
+    "output": "ماذا أفعل؟"
+  },
+  {
+    "input": "rani ta3ban barcha",
+    "output": "أنا متعب جداً"
+  },
+  {
+    "input": "nheb nرتاح fil dar",
+    "output": "أريد الراحة في المنزل"
+  },
+  {
+    "input": "kol chay mouch sahl",
+    "output": "كل شيء ليس سهلاً"
+  },
+  {
+    "input": "3andi problem kbir",
+    "output": "لدي مشكلة كبيرة"
+  },
+  {
+    "input": "nheb n3ich",
+    "output": "أريد أن أعيش"
+  },
+  {
+    "input": "winek tawa",
+    "output": "أين أنت الآن؟"
+  },
+  {
+    "input": "chniya sayer",
+    "output": "ماذا يحدث؟"
+  },
+  {
+    "input": "3lech taamel haka",
+    "output": "لماذا تفعل هذا؟"
+  },
+  {
+    "input": "nheb neselk sou2al",
+    "output": "أريد أن أسألك سؤال"
+  },
+  {
+    "input": "kol chay mrigel 3andek",
+    "output": "هل كل شيء جيد عندك؟"
+  },
+  {
+    "input": "3andi haja nheb nkoulha",
+    "output": "لدي شيء أريد قوله"
+  },
+  {
+    "input": "nheb n3awd",
+    "output": "أريد الإعادة"
+  },
+  {
+    "input": "chniya hadha bethabet",
+    "output": "ما هذا بالضبط؟"
+  },
+  {
+    "input": "nheb nfhmek",
+    "output": "أريد أن أفهمك"
+  },
+  {
+    "input": "3awed a3tini",
+    "output": "أعد إعطائي"
+  },
+  {
+    "input": "nheb nbadl rayi",
+    "output": "أريد تغيير رأيي"
+  },
+  {
+    "input": "rani ma3andich fikra",
+    "output": "ليس لدي فكرة"
+  },
+  {
+    "input": "chniya l7al",
+    "output": "ما الحل؟"
+  },
+  {
+    "input": "3lech daiman haka",
+    "output": "لماذا دائماً هكذا؟"
+  },
+  {
+    "input": "nheb n3ich mlih",
+    "output": "أريد أن أعيش بشكل جيد"
+  },
+  {
+    "input": "ma nجمش نستنا",
+    "output": "لا أستطيع الانتظار"
+  },
+  {
+    "input": "3andi mouchkla kima dima",
+    "output": "لدي مشكلة كالمعتاد"
+  },
+  {
+    "input": "rani ma nرتاحش",
+    "output": "أنا لا أرتاح"
+  },
+  {
+    "input": "nheb nsawer rouhi",
+    "output": "أريد تصوير نفسي"
+  },
+  {
+    "input": "chniya t7eb",
+    "output": "ماذا تريد؟"
+  },
+  {
+    "input": "nheb nbadl telifoun",
+    "output": "أريد تغيير الهاتف"
+  },
+  {
+    "input": "3lech tghib",
+    "output": "لماذا تختفي؟"
+  },
+  {
+    "input": "rani fi tariq",
+    "output": "أنا في الطريق"
+  },
+  {
+    "input": "nheb n9ra",
+    "output": "أريد أن أدرس"
+  },
+  {
+    "input": "nheb nنجح",
+    "output": "أريد النجاح"
+  },
+  {
+    "input": "rani na3mel fi moshkla",
+    "output": "أنا في مشكلة"
+  },
+  {
+    "input": "3lech tsakt",
+    "output": "لماذا تصمت؟"
+  },
+  {
+    "input": "nheb nbadl hayati",
+    "output": "أريد تغيير حياتي"
+  },
+  {
+    "input": "nheb nخرج m3ak",
+    "output": "أريد الخروج معك"
+  },
+  {
+    "input": "rani mabsout bik",
+    "output": "أنا سعيد بك"
+  },
+  {
+    "input": "3lech t9olli haka",
+    "output": "لماذا تقول لي هذا؟"
+  },
+  {
+    "input": "nheb nsawer video",
+    "output": "أريد تصوير فيديو"
+  },
+  {
+    "input": "chniya tsir fi hadha",
+    "output": "ماذا يحدث في هذا؟"
+  },
+  {
+    "input": "rani mta3ab bzf",
+    "output": "أنا متعب جداً"
+  },
+  {
+    "input": "nheb nرتاح chwaya",
+    "output": "أريد الراحة قليلاً"
+  },
+  {
+    "input": "3andi sujet kbir",
+    "output": "لدي موضوع كبير"
+  },
+  {
+    "input": "rani n7eb nbadl",
+    "output": "أريد التغيير"
+  },
+  {
+    "input": "nheb n3rf akthar",
+    "output": "أريد أن أعرف أكثر"
+  },
+  {
+    "input": "chniya rayek enti",
+    "output": "ما رأيك أنت؟"
+  },
+  {
+    "input": "3lech ma jeytch",
+    "output": "لماذا لم تأتِ؟"
+  }
+]
