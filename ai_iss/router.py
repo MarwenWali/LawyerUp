@@ -4,23 +4,23 @@ Supports Tunisian Arabic (Darija), Modern Standard Arabic, French, and English
 """
 
 import logging
-from generator import generate_answer
+from generator import generate_legal_answer
+
+try:
+    from translator import translate_tunisian_to_msa
+except ImportError:
+    def translate_tunisian_to_msa(text: str, max_tokens: int = 96) -> str:
+        return text
 
 logger = logging.getLogger(__name__)
 
-# Attempt to import slang converter, optional
+# Attempt to import slang converter, optional (intent helper only)
 try:
-    from slang_converter import add_tunisian_flavor, understand_slang_input
-    HAS_SLANG_CONVERTER = True
+    from slang_converter import understand_slang_input
 except ImportError:
-    HAS_SLANG_CONVERTER = False
     logger.warning("slang_converter not available")
     
     def understand_slang_input(text):
-        """Fallback: just return text as-is"""
-        return text
-    
-    def add_tunisian_flavor(text):
         """Fallback: just return text as-is"""
         return text
 
@@ -42,6 +42,11 @@ LEGAL_KEYWORDS = [
     # French
     "travail", "droit", "salaire", "contrat", "avocat", "tribunal", "legal",
     "congé", "assurance", "retraite", "licenciement", "formation",
+
+    # English
+    "right", "rights", "labor", "labour", "employment", "employer", "employee",
+    "salary", "wage", "contract", "dismissal", "fired", "fire", "terminate",
+    "termination", "notice", "overtime", "leave", "compensation", "lawsuit",
 ]
 
 # Simple affirmation/continuation words
@@ -56,7 +61,9 @@ FOLLOW_UP_WORDS = [
 # Common legal question patterns
 LEGAL_PATTERNS = [
     "شنية حقوق", "شنو حقوق", "ما خلصنيش", "ما يخلصنيش", "مخلصنيش",
-    "chnowa", "najem", "is it legal", "ai-je le droit"
+    "chnowa", "najem", "is it legal", "ai-je le droit",
+    "what are my rights", "can i be fired", "fired without notice",
+    "my employer", "employment contract", "labor law", "labour law"
 ]
 
 # Track conversation context
@@ -134,8 +141,11 @@ def handle_request(text: str) -> str:
     
     logger.info(f"Handling request: {text[:60]}...")
     
-    # Convert slang input to more formal text for understanding
-    formal_text = understand_slang_input(text)
+    # Stage-1 normalization: Tunisian/Arabizi -> MSA Arabic
+    translated_text = translate_tunisian_to_msa(text)
+
+    # Lightweight extra normalization for intent detection
+    formal_text = understand_slang_input(translated_text)
     
     # Store in conversation context
     _CONVERSATION_CONTEXT.append(text)
@@ -146,10 +156,11 @@ def handle_request(text: str) -> str:
     if is_follow_up(text) and _LAST_LEGAL_QUERY:
         logger.info("Detected follow-up to previous legal query")
         continuation_prompt = (
-            f"Previous question: {_LAST_LEGAL_QUERY}\n\n"
-            "User follow-up: Tell me more about this. Provide step-by-step practical guidance."
+            f"السؤال السابق: {_LAST_LEGAL_QUERY}\n"
+            f"سؤال المتابعة: {formal_text}\n"
+            "أكمل الإجابة بشكل عملي وفق قانون الشغل التونسي."
         )
-        response = generate_answer(continuation_prompt)
+        response = generate_legal_answer(continuation_prompt)
         return response
     
     # Detect intent (legal or casual)
@@ -161,7 +172,7 @@ def handle_request(text: str) -> str:
     if intent == "legal":
         logger.info("LEGAL query detected - using legal model")
         _LAST_LEGAL_QUERY = formal_text
-        response = generate_answer(formal_text)
+        response = generate_legal_answer(formal_text)
         return response
     else:
         # Casual response - encourage legal questions
@@ -171,4 +182,4 @@ def handle_request(text: str) -> str:
             "Can I help you with a legal question?\n"
             "Je peux t'aider avec une question légale?"
         )
-        return add_tunisian_flavor(casual_response)
+        return casual_response

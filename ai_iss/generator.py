@@ -1,52 +1,69 @@
 """
-Answer generation module for Tunisian Arabic Legal Assistant
-Loads fine-tuned model and generates responses
+Stage-2 legal answer generation module.
+This model expects a normalized Arabic question and answers based on Tunisian labor law.
 """
 
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-import os
 import logging
+import os
 import re
+import json
+import warnings
+from difflib import SequenceMatcher
 from typing import Optional
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
-# Attempt to import slang converter, but make it optional
-try:
-    from slang_converter import convert_to_slang, add_tunisian_flavor, understand_slang_input
-    HAS_SLANG_CONVERTER = True
-except ImportError:
-    HAS_SLANG_CONVERTER = False
-    logger.warning("slang_converter not available, using basic text processing")
-
 # Model paths to try (in order of preference)
 MODEL_PATHS = [
-    os.path.join(os.getcwd(), "legal-model"),  # Primary: newly fine-tuned model
-    os.path.join(os.getcwd(), "models", "legal-model"),  # Fallback: old location
+    os.path.join(os.getcwd(), "legal-model"),
+    os.path.join(os.getcwd(), "models", "legal-model"),
 ]
 
-# Device configuration
-def get_device():
-    """Determine the best device to use (GPU if available, otherwise CPU)"""
-    if torch.cuda.is_available():
-        device = "cuda"
-        logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        try:
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-            logger.info(f"GPU Memory: {gpu_memory:.1f} GB")
-        except:
-            pass
-    else:
-        device = "cpu"
-        logger.info("Using CPU (GPU not available)")
-    
-    return device
-
-# Global model and tokenizer (loaded once)
 _model = None
 _tokenizer = None
 _device = None
+_fallback_qa_cache = None
+
+FALLBACK_DATA_PATHS = [
+    os.path.join(os.getcwd(), "data", "legal_train_ar.json"),
+    os.path.join(os.getcwd(), "data", "tunisian_legal.json"),
+]
+
+LEGAL_SIGNAL_TERMS = [
+    "قانون",
+    "حقوق",
+    "عقد",
+    "شغل",
+    "عمل",
+    "محكمة",
+    "تعويض",
+    "أجر",
+    "CNSS",
+]
+
+# Cross-language legal intent hints to improve retrieval matching.
+SEMANTIC_HINT_PATTERNS = [
+    (r"\b(7a9|7a9i|ha9|ha9i|rights?|droit|droits?|حق|حقوق|حقي)\b", "حقوق"),
+    (r"\b(khedma|5edma|travail|work|job|emploi|خدمة|عمل|شغل)\b", "عمل"),
+    (r"\b(tared|taredni|fired?|fire|licenciement|dismiss(?:al)?|termination|طرد|فصل|تسرح)\b", "طرد"),
+    (r"\b(i3lem|notice|preavis|préavis|إعلام|اعلام)\b", "اعلام"),
+    (r"\b(employer|boss|patron|company|entreprise|صاحب\s*العمل)\b", "صاحب_العمل"),
+    (r"\b(kanoun|law|legal|juridique|قانون)\b", "قانون"),
+]
+
+
+def get_device() -> str:
+    """Determine the best device to use (GPU if available, otherwise CPU)."""
+    if torch.cuda.is_available():
+        device = "cuda"
+        logger.info("Using GPU: %s", torch.cuda.get_device_name(0))
+        return device
+
+    logger.info("Using CPU (GPU not available)")
+    return "cpu"
 
 
 def _contains_cjk(text: str) -> bool:
@@ -55,103 +72,214 @@ def _contains_cjk(text: str) -> bool:
         return False
     return re.search(r"[\u4e00-\u9fff]", text) is not None
 
-def load_model(model_path: Optional[str] = None, force_cpu: bool = False):
-    """
-    Load model and tokenizer
-    
-    Args:
-        model_path: Custom path to model (if None, tries default paths)
-        force_cpu: Force CPU usage even if GPU available
-        
-    Returns:
-        Tuple of (tokenizer, model, device)
-    """
+
+def _contains_arabic(text: str) -> bool:
+    if not text:
+        return False
+    return re.search(r"[\u0600-\u06FF]", text) is not None
+
+
+def _normalize_for_match(text: str) -> str:
+    lowered = (text or "").lower().strip()
+    lowered = lowered.replace("؟", "?")
+    lowered = re.sub(r"[^a-z0-9\u0600-\u06FF\s?]", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+
+def _extract_semantic_hints(text: str) -> set:
+    normalized = _normalize_for_match(text)
+    hints = set()
+    for pattern, hint in SEMANTIC_HINT_PATTERNS:
+        if re.search(pattern, normalized):
+            hints.add(hint)
+    return hints
+
+
+def _load_fallback_qa_pairs():
+    global _fallback_qa_cache
+
+    if _fallback_qa_cache is not None:
+        return _fallback_qa_cache
+
+    pairs = []
+    for path in FALLBACK_DATA_PATHS:
+        if not os.path.exists(path):
+            continue
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as exc:
+            logger.warning("Could not read fallback data from %s: %s", path, exc)
+            continue
+
+        if not isinstance(data, list):
+            continue
+
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            q = (item.get("input") or "").strip()
+            a = (item.get("output") or "").strip()
+            if q and a:
+                pairs.append((q, a))
+
+    # Deduplicate while preserving order
+    seen = set()
+    deduped = []
+    for q, a in pairs:
+        key = (q, a)
+        if key not in seen:
+            seen.add(key)
+            deduped.append((q, a))
+
+    _fallback_qa_cache = deduped
+    logger.info("Loaded %d fallback QA pairs", len(_fallback_qa_cache))
+    return _fallback_qa_cache
+
+
+def _retrieve_fallback_answer(question: str) -> Optional[str]:
+    pairs = _load_fallback_qa_pairs()
+    if not pairs:
+        return None
+
+    q_norm = _normalize_for_match(question)
+    if not q_norm:
+        return None
+
+    q_tokens = set(q_norm.split())
+    q_hints = _extract_semantic_hints(question)
+    best_score = 0.0
+    best_answer = None
+
+    for candidate_q, candidate_a in pairs:
+        c_norm = _normalize_for_match(candidate_q)
+        if not c_norm:
+            continue
+
+        seq = SequenceMatcher(None, q_norm, c_norm).ratio()
+        c_tokens = set(c_norm.split())
+        overlap = len(q_tokens & c_tokens) / max(len(q_tokens | c_tokens), 1)
+        c_hints = _extract_semantic_hints(candidate_q)
+        hint_overlap = len(q_hints & c_hints) / max(len(q_hints | c_hints), 1) if (q_hints or c_hints) else 0.0
+        contains_bonus = 0.12 if q_norm in c_norm or c_norm in q_norm else 0.0
+
+        score = 0.55 * seq + 0.2 * overlap + 0.25 * hint_overlap + contains_bonus
+        if score > best_score:
+            best_score = score
+            best_answer = candidate_a
+
+    if best_score >= 0.58:
+        logger.info("Using retrieval fallback answer (score=%.3f)", best_score)
+        return best_answer
+
+    # For clearly legal queries that generated poor text, accept a lower match threshold.
+    if q_hints and best_score >= 0.42:
+        logger.info("Using retrieval fallback answer with relaxed threshold (score=%.3f)", best_score)
+        return best_answer
+
+    return None
+
+
+def _is_low_quality_response(response: str) -> bool:
+    text = (response or "").strip()
+    if not text:
+        return True
+
+    if len(text.split()) < 6:
+        return True
+
+    if "### question" in text.lower() or "### answer" in text.lower():
+        return True
+
+    if not _contains_arabic(text):
+        return True
+
+    if not any(term in text for term in LEGAL_SIGNAL_TERMS):
+        return True
+
+    return False
+
+
+def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
+    """Load legal model and tokenizer once and reuse them."""
     global _model, _tokenizer, _device
-    
+
     if _model is not None and _tokenizer is not None:
         return _tokenizer, _model, _device
-    
-    # Find model path
+
     if model_path is None:
-        model_path = None
         for path in MODEL_PATHS:
             if os.path.exists(path):
                 model_path = path
-                logger.info(f"Found model at: {model_path}")
+                logger.info("Found legal model at: %s", model_path)
                 break
-    
+
     if model_path is None:
-        raise ValueError(f"Model not found in any of: {MODEL_PATHS}")
-    
-    # Determine device
+        raise ValueError(f"Legal model not found in any of: {MODEL_PATHS}")
+
     _device = "cpu" if force_cpu else get_device()
-    
-    # Load tokenizer
-    logger.info(f"Loading tokenizer from {model_path}...")
+
+    logger.info("Loading tokenizer from %s...", model_path)
     _tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
-    
-    # Load model
-    logger.info(f"Loading model from {model_path}...")
+
+    logger.info("Loading legal model from %s...", model_path)
     try:
-        # Try with auto device map first
-        _model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            local_files_only=True,
-            device_map="auto" if _device == "cuda" else "cpu",
-            dtype=torch.float16 if _device == "cuda" else torch.float32,
-        )
-    except Exception as e:
-        logger.warning(f"Auto device load failed: {e}, trying standard load...")
-        _model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            local_files_only=True,
-            dtype=torch.float32
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Unexpected keyword arguments .* for class LoraConfig.*",
+                category=UserWarning,
+            )
+            _model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                local_files_only=True,
+                device_map="auto" if _device == "cuda" else "cpu",
+                dtype=torch.float16 if _device == "cuda" else torch.float32,
+            )
+    except Exception as exc:
+        logger.warning("Auto device load failed: %s. Falling back to standard load.", exc)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r"Unexpected keyword arguments .* for class LoraConfig.*",
+                category=UserWarning,
+            )
+            _model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                local_files_only=True,
+                dtype=torch.float32,
+            )
         if _device == "cuda":
             _model = _model.to(_device)
-    
+
     _model.eval()
-    logger.info("✓ Model loaded successfully!")
-    
+    logger.info("Legal model loaded successfully")
     return _tokenizer, _model, _device
 
-def generate_answer(text: str, max_tokens: int = 256) -> str:
-    """
-    Generate answer for Tunisian Arabic query
-    
-    Args:
-        text: User question in any supported language
-        max_tokens: Maximum tokens to generate
-        
-    Returns:
-        Generated answer
-    """
-    # Load model if not already loaded
-    tokenizer, model, device = load_model()
-    
-    # Convert slang input to formal Arabic if converter available
-    if HAS_SLANG_CONVERTER:
-        formal_text = understand_slang_input(text)
-    else:
-        formal_text = text
-    
-    # Keep inference format aligned with the format used during training.
-    prompt = f"""### Instruction:
-{formal_text}
 
-### Response:
+def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
+    """Generate a legal answer from a normalized Arabic question."""
+    tokenizer, model, device = load_legal_model()
+
+    prompt = f"""### Instruction:
+أجب باللغة العربية الفصحى وفق قانون الشغل التونسي. قدّم جوابا واضحا ومختصرا.
+
+### Question:
+{question_msa}
+
+### Answer:
 """
-    
-    # Tokenize
+
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
         truncation=True,
         padding=True,
-        max_length=512
+        max_length=512,
     ).to(device)
-    
-    # Generate
+
     with torch.no_grad():
         output = model.generate(
             **inputs,
@@ -161,23 +289,22 @@ def generate_answer(text: str, max_tokens: int = 256) -> str:
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
-    
-    # Decode
+
     result = tokenizer.decode(output[0], skip_special_tokens=True)
-    
-    # Extract response part
-    if "### Response:" in result:
-        response = result.split("### Response:")[-1].strip()
+    if "### Answer:" in result:
+        response = result.split("### Answer:")[-1].strip()
     else:
         response = result.replace(prompt, "").strip()
 
-    # If model drifts to CJK despite non-CJK user input, retry with a stricter instruction.
-    if _contains_cjk(response) and not _contains_cjk(formal_text):
+    if _contains_cjk(response):
         strict_prompt = f"""### Instruction:
-{formal_text}
+أجب بالعربية الفصحى فقط وفق قانون الشغل التونسي.
 
-### Response:
-Respond only in the same language as the user (Darija/Arabic/French/English)."""
+### Question:
+{question_msa}
+
+### Answer:
+"""
         strict_inputs = tokenizer(
             strict_prompt,
             return_tensors="pt",
@@ -195,17 +322,26 @@ Respond only in the same language as the user (Darija/Arabic/French/English)."""
                 eos_token_id=tokenizer.eos_token_id,
             )
         strict_result = tokenizer.decode(strict_output[0], skip_special_tokens=True)
-        if "### Response:" in strict_result:
-            response = strict_result.split("### Response:")[-1].strip()
+        if "### Answer:" in strict_result:
+            response = strict_result.split("### Answer:")[-1].strip()
         else:
             response = strict_result.replace(strict_prompt, "").strip()
-    
-    # Fallback if empty
+
+    if _is_low_quality_response(response):
+        fallback = _retrieve_fallback_answer(question_msa)
+        if fallback:
+            return fallback
+
     if not response:
-        response = "نفهم سؤالك القانوني. رجاء تفضل بتوضيح المزيد."
-    
-    # Convert to Tunisian slang if converter available
-    if HAS_SLANG_CONVERTER:
-        response = add_tunisian_flavor(response)
-    
+        response = "لفهم حالتك القانونية بدقة، من فضلك قدّم تفاصيل أكثر عن عقد العمل والوضع الحالي."
+
     return response
+
+
+# Backward-compatible aliases used by other modules.
+def load_model(model_path: Optional[str] = None, force_cpu: bool = False):
+    return load_legal_model(model_path=model_path, force_cpu=force_cpu)
+
+
+def generate_answer(text: str, max_tokens: int = 256) -> str:
+    return generate_legal_answer(question_msa=text, max_tokens=max_tokens)

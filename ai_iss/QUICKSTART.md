@@ -43,11 +43,23 @@ source mistral_env/bin/activate
 # Run interactive assistant
 python app.py
 
-# Train the model
+# Build stage datasets (translation + legal)
+python prepare_two_stage_data.py
+
+# Train stage-1 translator model (Tunisian -> MSA)
+python train_translator.py
+
+# Train stage-2 legal model (MSA -> legal answer)
 python train.py
+
+# Run all stages in one command
+python train_two_stage.py
 
 # Test the model
 python test.py
+
+# Evaluate stage-1 and stage-2 separately
+python evaluate_two_stage.py
 
 # Interactive testing
 python test.py --interactive
@@ -187,6 +199,7 @@ ai_iss/
 ├── 📄 router.py              # 🧭 Request routing
 ├── 📄 app.py                 # 💬 Interactive CLI
 ├── 📄 test.py                # ✅ Testing suite
+├── 📄 evaluate_two_stage.py  # 📈 Separate stage evaluation
 ├── 📄 format_data.py         # 📋 Data utilities
 ├── 📦 requirements.txt       # 📚 Dependencies
 ├── 🚀 setup.ps1              # Setup for Windows
@@ -225,7 +238,7 @@ python -c "from format_data import validate_dataset; \
 ### Step 3: Train
 
 ```bash
-python train.py
+python train_two_stage.py
 ```
 
 ### Step 4: Test
@@ -237,7 +250,7 @@ python test.py
 ## Next Steps
 
 1. **Prepare Data**: Ensure `data/tunisian_legal.json` has your Tunisian legal Q&A
-2. **Train**: Run `python train.py` to fine-tune the model
+2. **Train**: Run `python train_two_stage.py` for translator + legal model
 3. **Test**: Use `python test.py` to verify quality
 4. **Deploy**: Use `python app.py` for interactive use
 5. **Evaluate**: Check training logs in `./logs/`
