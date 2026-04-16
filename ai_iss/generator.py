@@ -8,6 +8,7 @@ import os
 import re
 import json
 import warnings
+from collections import Counter
 from difflib import SequenceMatcher
 from typing import Optional
 
@@ -42,6 +43,94 @@ LEGAL_SIGNAL_TERMS = [
     "تعويض",
     "أجر",
     "CNSS",
+]
+
+TOPIC_RULES = [
+    {
+        "patterns": [
+            r"\b(tared|taredni|fired?|fire|dismiss(?:al)?|termination|licenciement|طرد|فصل|تسريح)\b",
+            r"\b(i3lem|notice|preavis|préavis|إشعار|إعلام|اعلام)\b",
+        ],
+        "basis": "وفق مجلة الشغل التونسية: لا يجوز الطرد التعسفي، ويجب احترام الإجراءات القانونية والإعلام المسبق، ومع عدم احترامها يثبت حق العامل في الطعن والتعويض.",
+        "steps": [
+            "اجمع عقد الشغل وكشوف الأجر وأي مراسلات تخص إنهاء العلاقة.",
+            "قدّم تظلما كتابيا لصاحب العمل واطلب بيان سبب الطرد قانونيا.",
+            "ارفع شكاية لدى تفقدية الشغل، ثم الطعن قضائيا عند الاقتضاء لطلب التعويض.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(salaire|salary|wage|pay|paie|خلص|خلاص|أجر|راتب)\b",
+        ],
+        "basis": "وفق مجلة الشغل التونسية: الأجر حق أساسي للعامل، وتأخير الأجر أو الامتناع عنه دون سند قانوني يعرّض المشغّل للمساءلة.",
+        "steps": [
+            "اطلب كشفا واضحا لمستحقاتك والأشهر غير المدفوعة.",
+            "وجّه إنذارا كتابيا مع أجل محدد للخلاص.",
+            "التجئ لتفقدية الشغل أو القضاء للمطالبة بالأجر والتعويض عند الضرر.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(cnss|social|sécurité|ضمان|الضمان\s*الاجتماعي)\b",
+        ],
+        "basis": "وفق قانون الضمان الاجتماعي في تونس: التصريح بالأجراء وخلاص المساهمات واجب قانوني على المشغّل، والإخلال به يضر حقوق العامل التأمينية.",
+        "steps": [
+            "تحقق من وضعيتك لدى CNSS وطباعة كشف المساهمات.",
+            "اطلب من المشغّل تسوية التصريح فورا بصفة كتابية.",
+            "قدّم مطلبا لدى CNSS وتفقدية الشغل لإثبات العلاقة الشغلية وتدارك الفترات.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(contrat|contract|عقد)\b",
+        ],
+        "basis": "وفق مجلة الشغل التونسية: عقد الشغل يحدد الحقوق والواجبات، وأي شرط مخالف للنظام العام الاجتماعي يمكن الطعن فيه.",
+        "steps": [
+            "راجع بنود العقد خصوصا الأجر والمدة والتجربة والإنهاء.",
+            "اطلب تعديل البنود الغامضة أو المجحفة قبل الإمضاء.",
+            "استشر مختصا أو تفقدية الشغل إذا وُجد شرط غير قانوني.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(overtime|heures?\s*suppl[eé]mentaires?|ساعات\s*إضافية)\b",
+        ],
+        "basis": "وفق مجلة الشغل التونسية: الساعات الإضافية تخضع لشروط قانونية ويترتب عنها أجر إضافي حسب النسب المعمول بها.",
+        "steps": [
+            "احتفظ بسجل فعلي لساعات العمل اليومية.",
+            "طالب بتسوية مقابل الساعات الإضافية كتابيا.",
+            "عند الرفض، قدّم شكاية لدى تفقدية الشغل مع الإثباتات.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(cong[eé]|leave|vacation|عطلة|إجازة|مرضية)\b",
+        ],
+        "basis": "وفق مجلة الشغل التونسية: للعامل حق في العطل القانونية (السنوية والمرضية) ضمن الشروط والإجراءات المنصوص عليها.",
+        "steps": [
+            "قدّم طلب العطلة أو الملف الطبي طبقا للإجراءات الداخلية.",
+            "اطلب رفضا أو قبولا مكتوبا لتوثيق الوضعية.",
+            "اعرض النزاع على تفقدية الشغل إذا تم رفض الحق دون موجب قانوني.",
+        ],
+    },
+    {
+        "patterns": [
+            r"\b(harass|harc[eè]lement|تحرش)\b",
+        ],
+        "basis": "وفق التشريع التونسي ومجلة الشغل: التحرش أو الإيذاء في بيئة العمل سلوك ممنوع ويستوجب حماية العامل واتخاذ إجراءات ضد المعتدي.",
+        "steps": [
+            "وثّق الوقائع (تواريخ، رسائل، شهود) بدقة.",
+            "أبلغ الإدارة كتابيا مع طلب حماية فورية.",
+            "توجّه للجهات المختصة عند عدم المعالجة داخليا.",
+        ],
+    },
+]
+
+DEFAULT_BASIS = "وفق القواعد العامة في مجلة الشغل التونسية: لكل عامل حقوق تتعلق بالأجر، وظروف العمل، والحماية من التعسف، ويمكن المطالبة بها عبر المسارات الإدارية والقضائية."
+DEFAULT_STEPS = [
+    "حدّد الوقائع بدقة مع التواريخ والمستندات.",
+    "قدّم طلبا أو تظلما كتابيا لصاحب العمل.",
+    "التجئ إلى تفقدية الشغل، ثم القضاء عند الحاجة لحماية حقك.",
 ]
 
 # Cross-language legal intent hints to improve retrieval matching.
@@ -94,6 +183,108 @@ def _extract_semantic_hints(text: str) -> set:
         if re.search(pattern, normalized):
             hints.add(hint)
     return hints
+
+
+def _has_excessive_repetition(text: str) -> bool:
+    tokens = re.findall(r"[\u0600-\u06FFa-z0-9]+", (text or "").lower())
+    if len(tokens) < 12:
+        return False
+
+    token_counts = Counter(tokens)
+    unique_ratio = len(token_counts) / len(tokens)
+    if unique_ratio < 0.45:
+        return True
+
+    if token_counts and max(token_counts.values()) >= 6:
+        return True
+
+    if len(tokens) >= 9:
+        tri_grams = [" ".join(tokens[i : i + 3]) for i in range(len(tokens) - 2)]
+        tri_counts = Counter(tri_grams)
+        if tri_counts and max(tri_counts.values()) >= 3:
+            return True
+
+    return False
+
+
+def _looks_gibberish_text(text: str) -> bool:
+    cleaned = _clean_explanation_text(text)
+    if not cleaned:
+        return True
+
+    lowered = cleaned.lower()
+    if "<extra_id_" in lowered:
+        return True
+
+    if _has_excessive_repetition(cleaned):
+        return True
+
+    if re.search(r"([\u0600-\u06FF]{4,})(?:\s+\1){2,}", cleaned):
+        return True
+
+    tokens = re.findall(r"[\u0600-\u06FFa-z0-9]+", lowered)
+    if len(tokens) >= 10:
+        long_tokens = [t for t in tokens if len(t) >= 5]
+        if long_tokens:
+            counts = Counter(long_tokens)
+            if max(counts.values()) >= 4:
+                return True
+
+    # Common garbled pattern from mixed tokenization artifacts.
+    if re.search(r"[\u0600-\u06FF]+'[a-z]", lowered):
+        return True
+
+    return False
+
+
+def _detect_topic_rule(question: str, answer: str) -> dict:
+    question_norm = _normalize_for_match(question)
+
+    # Prefer topic signals from the user question.
+    for rule in TOPIC_RULES:
+        for pattern in rule["patterns"]:
+            if re.search(pattern, question_norm):
+                return rule
+
+    return {
+        "basis": DEFAULT_BASIS,
+        "steps": DEFAULT_STEPS,
+    }
+
+
+def _clean_explanation_text(text: str) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "")).strip()
+    cleaned = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -,:;\n\t")
+    if len(cleaned) > 380:
+        cleaned = cleaned[:380].rsplit(" ", 1)[0] + "..."
+    return cleaned
+
+
+def _format_legal_response(question: str, answer_text: str) -> str:
+    rule = _detect_topic_rule(question, answer_text)
+    explanation = _clean_explanation_text(answer_text)
+
+    if _looks_gibberish_text(explanation):
+        fallback_explanation = _retrieve_fallback_answer(question)
+        if fallback_explanation and _contains_arabic(fallback_explanation) and not _looks_gibberish_text(fallback_explanation):
+            explanation = _clean_explanation_text(fallback_explanation)
+
+    if not explanation or len(explanation.split()) < 6:
+        explanation = "القاعدة العامة: لا يكفي مجرد موقف شفوي لإسقاط حقوق العامل، ويجب احترام الإجراءات القانونية والإثباتات."
+
+    if not _contains_arabic(explanation) or _looks_gibberish_text(explanation):
+        explanation = "باختصار: " + rule["basis"].split(":", 1)[-1].strip()
+
+    steps = rule["steps"]
+    return (
+        f"الأساس القانوني:\n{rule['basis']}\n\n"
+        f"الشرح المبسّط:\n{explanation}\n\n"
+        "ماذا تفعل الآن:\n"
+        f"1) {steps[0]}\n"
+        f"2) {steps[1]}\n"
+        f"3) {steps[2]}"
+    )
 
 
 def _load_fallback_qa_pairs():
@@ -190,7 +381,16 @@ def _is_low_quality_response(response: str) -> bool:
     if len(text.split()) < 6:
         return True
 
+    if "<extra_id_" in text.lower():
+        return True
+
     if "### question" in text.lower() or "### answer" in text.lower():
+        return True
+
+    if _has_excessive_repetition(text):
+        return True
+
+    if _looks_gibberish_text(text):
         return True
 
     if not _contains_arabic(text):
@@ -285,7 +485,8 @@ def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
             **inputs,
             max_length=min(2048, inputs["input_ids"].shape[1] + max_tokens),
             do_sample=False,
-            repetition_penalty=1.1,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=3,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
@@ -317,7 +518,8 @@ def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
                 **strict_inputs,
                 max_length=min(2048, strict_inputs["input_ids"].shape[1] + max_tokens),
                 do_sample=False,
-                repetition_penalty=1.1,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3,
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )
@@ -330,12 +532,12 @@ def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
     if _is_low_quality_response(response):
         fallback = _retrieve_fallback_answer(question_msa)
         if fallback:
-            return fallback
+            response = fallback
 
     if not response:
         response = "لفهم حالتك القانونية بدقة، من فضلك قدّم تفاصيل أكثر عن عقد العمل والوضع الحالي."
 
-    return response
+    return _format_legal_response(question_msa, response)
 
 
 # Backward-compatible aliases used by other modules.
