@@ -47,6 +47,17 @@ def _looks_tunisian_or_arabizi(text: str) -> bool:
     return has_digits or (has_latin and not _has_arabic(lowered))
 
 
+def _is_invalid_translation(candidate: str) -> bool:
+    lowered = (candidate or "").strip().lower()
+    if not lowered:
+        return True
+    if "<extra_id_" in lowered:
+        return True
+    if lowered in {".", "؟", "?"}:
+        return True
+    return False
+
+
 def _get_device(force_cpu: bool = False) -> str:
     if force_cpu:
         return "cpu"
@@ -129,4 +140,8 @@ def translate_tunisian_to_msa(text: str, max_tokens: int = 96) -> str:
         )
 
     translated = tokenizer.decode(outputs[0], skip_special_tokens=True).strip()
+    if _is_invalid_translation(translated):
+        logger.warning("Translator produced invalid output; using normalized fallback.")
+        return normalized
+
     return translated if translated else normalized
