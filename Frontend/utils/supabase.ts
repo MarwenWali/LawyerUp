@@ -65,6 +65,7 @@ export const supabase = hasSupabaseEnv
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
+        storageKey: 'lawyerup-supabase-auth',
       },
     })
   : (missingSupabaseClient as any);

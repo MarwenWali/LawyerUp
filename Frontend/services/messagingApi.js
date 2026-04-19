@@ -1,5 +1,6 @@
 import { supabase } from '@/utils/supabase';
 import { clearSupabaseSessionCache } from '@/utils/supabaseSession';
+import { api } from '@/services/api';
 
 function getSupabaseRuntimeConfig() {
   const base = process.env.EXPO_PUBLIC_SUPABASE_URL;

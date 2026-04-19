@@ -11,7 +11,7 @@ export async function clearSupabaseSessionCache() {
   try {
     const keys = await AsyncStorage.getAllKeys();
     const supabaseKeys = keys.filter(
-      (key) => key.startsWith('sb-') && key.includes('-auth-token')
+      (key) => key.startsWith('sb-') || key === 'lawyerup-supabase-auth'
     );
 
     if (supabaseKeys.length > 0) {
