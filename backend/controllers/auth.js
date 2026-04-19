@@ -62,16 +62,24 @@ export async function register(req, res) {
     }
 
     const bridgePassword = role === 'lawyer' ? undefined : password;
-    const bridgeResult = await ensureSupabaseMessagingIdentity({
-      publicUserId: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.full_name,
-      password: bridgePassword,
-      db: client,
-    });
-    if (bridgeResult?.createdAuthUser) {
-      authUserForCleanup = bridgeResult.authUserId;
+    
+    let supabaseResult = { session: null };
+    try {
+      supabaseResult = await ensureSupabaseMessagingIdentity({
+        publicUserId: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.full_name,
+        password: bridgePassword,
+        db: client,
+      });
+    } catch (supabaseError) {
+      console.warn('Supabase messaging integration failed during registration:', supabaseError.message);
+      // Continue registration even if Supabase integration fails
+    }
+    
+    if (supabaseResult?.createdAuthUser) {
+      authUserForCleanup = supabaseResult.authUserId;
     }
 
     await client.query('COMMIT');
@@ -114,7 +122,7 @@ export async function register(req, res) {
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
-      response.supabaseSession = toSupabaseSessionPayload(bridgeResult.session);
+      response.supabaseSession = toSupabaseSessionPayload(supabaseResult.session);
     }
 
     res.status(201).json(response);
@@ -198,13 +206,22 @@ export async function login(req, res) {
       return res.status(403).json({ error: 'Account pending verification' });
     }
 
-    const bridgeResult = await ensureSupabaseMessagingIdentity({
-      publicUserId: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.full_name,
-      password,
-    });
+    let supabaseSession = null;
+    
+    try {
+      const bridgeResult = await ensureSupabaseMessagingIdentity({
+        publicUserId: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.full_name,
+        password,
+      });
+      supabaseSession = toSupabaseSessionPayload(bridgeResult.session);
+    } catch (supabaseError) {
+      console.warn('Supabase messaging integration failed:', supabaseError.message);
+      // Continue with login even if Supabase messaging integration fails
+      // The JWT token will still work for authentication
+    }
 
     const token = jwt.sign(
       { userId: user.id, role: user.role },
@@ -222,7 +239,7 @@ export async function login(req, res) {
         profile_photo_url: user.profile_photo_url || null,
       },
       token,
-      supabaseSession: toSupabaseSessionPayload(bridgeResult.session),
+      supabaseSession,
     });
   } catch (error) {
     console.error('Login error:', error);

@@ -23,9 +23,13 @@ export function AuthProvider({ children }) {
     try {
       const token = await getToken();
       if (token) {
-        const supabaseSessionReady = await hasSupabaseSession();
-        if (!supabaseSessionReady) {
-          throw new Error('Supabase session missing');
+        try {
+          const supabaseSessionReady = await hasSupabaseSession();
+          if (!supabaseSessionReady) {
+            console.warn('Supabase session not available; continuing with JWT auth');
+          }
+        } catch (supabaseError) {
+          console.warn('Supabase session check failed:', supabaseError.message);
         }
 
         const data = await authApi.verify();
@@ -63,7 +67,13 @@ export function AuthProvider({ children }) {
     const data = await authApi.login(email, password);
     try {
       await setToken(data.token);
-      await syncSupabaseSessionFromPayload(data.supabaseSession, { required: true });
+      // Attempt to sync Supabase session, but don't require it for authentication
+      try {
+        await syncSupabaseSessionFromPayload(data.supabaseSession, { required: false });
+      } catch (supabaseError) {
+        console.warn('Supabase session sync warning:', supabaseError.message);
+        // Continue login even if Supabase sync fails - JWT authentication is still valid
+      }
       await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
       setUser(data.user);
       return data.user;
@@ -133,7 +143,13 @@ export function AuthProvider({ children }) {
     });
     try {
       await setToken(data.token);
-      await syncSupabaseSessionFromPayload(data.supabaseSession, { required: true });
+      // Attempt to sync Supabase session, but don't require it for authentication
+      try {
+        await syncSupabaseSessionFromPayload(data.supabaseSession, { required: false });
+      } catch (supabaseError) {
+        console.warn('Supabase session sync warning during registration:', supabaseError.message);
+        // Continue registration even if Supabase sync fails - JWT authentication is still valid
+      }
       await AsyncStorage.setItem('lawyerup_user', JSON.stringify(data.user));
       setUser(data.user);
       return data.user;

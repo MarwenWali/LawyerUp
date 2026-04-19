@@ -21,6 +21,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "message", selected: "message.fill" }} />
         <Label>{t.chat}</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="inbox">
+        <Icon sf={{ default: "envelope", selected: "envelope.fill" }} />
+        <Label>{t.inbox || "Inbox"}</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="lawyers">
         <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
         <Label>{t.lawyers}</Label>
@@ -68,6 +72,7 @@ function ClassicTabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: t.home, tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} /> }} />
       <Tabs.Screen name="chat" options={{ title: t.chat, tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} /> }} />
+      <Tabs.Screen name="inbox" options={{ title: t.inbox || "Inbox", tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} /> }} />
       <Tabs.Screen name="lawyers" options={{ title: t.lawyers, tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
     </Tabs>

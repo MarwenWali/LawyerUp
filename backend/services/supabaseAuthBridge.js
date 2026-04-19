@@ -29,7 +29,7 @@ async function ensureAuthUserLinksTable(db = pool) {
     await db.query(`
       CREATE TABLE IF NOT EXISTS auth_user_links (
         public_user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        auth_user_id UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        auth_user_id UUID UNIQUE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

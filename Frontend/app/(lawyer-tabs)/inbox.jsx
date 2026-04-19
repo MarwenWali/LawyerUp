@@ -39,14 +39,17 @@ function formatTimestamp(isoDate) {
 }
 
 function normalizeBackendConversation(conversation) {
-  const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
-  const title = participant.name || participant.full_name || 'Conversation';
-
+  // The conversation should already be normalized by ChatContext
+  // Just add the fields needed for the lawyer inbox
+  const participant = conversation.other_participant || {};
+  
   return {
     ...conversation,
+    uniqueKey: `backend_${conversation.id}`,
     conversation_id: conversation.id,
     source: 'backend',
-    other_participant_name: title,
+    // Use the already normalized data from ChatContext
+    other_participant_name: participant.name || participant.full_name || 'Conversation',
     other_participant_role: participant.role || 'citizen',
     last_message: conversation.last_message?.content || conversation.last_message_preview || '',
     last_message_at: conversation.last_message_at || conversation.created_at,
@@ -55,11 +58,17 @@ function normalizeBackendConversation(conversation) {
 }
 
 function normalizeAdminConversation(conversation) {
+  // Get the actual participant role from the conversation data
+  const participant = conversation.other_participant || {};
+  const actualRole = participant.role || conversation.other_participant_role || 'unknown';
+  
   return {
     ...conversation,
+    uniqueKey: `admin_${conversation.conversation_id || conversation.id}`,
     source: 'legacy',
     conversation_id: conversation.conversation_id || conversation.id,
-    other_participant_role: 'admin',
+    other_participant_role: actualRole,  // Use actual role, not forced 'admin'
+    other_participant_name: participant.name || participant.full_name || conversation.other_participant_name || 'Conversation',
     last_message_at: conversation.last_message_at || conversation.created_at,
     unread_count: Number(conversation.unread_count || 0),
   };
@@ -179,35 +188,45 @@ export default function LawyerInboxPage() {
   const refreshTimeoutRef = useRef(null);
   const loadVersionRef = useRef(0);
 
-  // Normalize backend conversations
+  // Normalize backend conversations with strict admin separation
   const backendRows = useMemo(
     () => backendConversations
       .map(normalizeBackendConversation)
       .filter(conv => {
-        // Exclude admin conversations from backend (only get them from legacy API)
+        // Strict filtering: exclude any admin conversations to prevent cross-contamination
         const role = conv.other_participant_role || 'unknown';
-        return role !== 'admin';
+        const participantRole = conv.other_participant?.role || 'unknown';
+        
+        // Double-check both role fields to ensure no admin conversations leak through
+        return role !== 'admin' && participantRole !== 'admin';
       }),
     [backendConversations]
   );
 
-  // Combine all conversations from both sources
+  // Combine all conversations from both sources with strict type separation
   const allConversations = useMemo(() => {
     const combined = [...adminRows, ...backendRows];
     
-    // Deduplicate - prioritize legacy admin, then by conversation_id
-    const adminConvs = combined.filter(isAdminConversation);
-    const clientConvs = combined.filter(conv => !isAdminConversation(conv));
+    // Strict separation: filter by conversation type
+    const adminConvs = combined.filter(conv => {
+      const role = conv.other_participant?.role || conv.other_participant_role || 'unknown';
+      return role === 'admin';
+    });
+    
+    const clientConvs = combined.filter(conv => {
+      const role = conv.other_participant?.role || conv.other_participant_role || 'unknown';
+      return role !== 'admin' && role !== 'unknown';
+    });
     
     // Keep only ONE admin conversation (the first one from legacy)
     const adminToKeep = adminConvs.length > 0 ? [adminConvs[0]] : [];
     
-    // Deduplicate client conversations by ID
+    // Deduplicate client conversations by conversation ID to prevent duplicates
     const clientSeen = new Set();
     const deduplicatedClients = clientConvs.filter(conv => {
-      const id = conv.conversation_id || conv.id;
-      if (clientSeen.has(id)) return false;
-      clientSeen.add(id);
+      const conversationId = conv.conversation_id || conv.id;
+      if (clientSeen.has(conversationId)) return false;
+      clientSeen.add(conversationId);
       return true;
     });
     
@@ -237,21 +256,34 @@ export default function LawyerInboxPage() {
 
   const openBackendConversation = useCallback((conversation) => {
     const participant = conversation.other_participant || {};
+    
+    // Double-check this is not an admin conversation to prevent cross-contamination
+    const participantRole = participant.role || conversation.other_participant_role || 'unknown';
+    if (participantRole === 'admin') {
+      console.warn('Attempted to open admin conversation as backend conversation - blocked');
+      return;
+    }
+    
     router.push({
       pathname: '/(messaging)/chat',
       params: {
         conversationId: conversation.id,
         title: participant.name || participant.full_name || 'Conversation',
+        // Add flag to indicate this is a user conversation
+        isUserChat: 'true',
       },
     });
   }, []);
 
   const openLegacyConversation = useCallback((conversationId, title) => {
+    // Ensure this is treated as an admin conversation
     router.push({
       pathname: '/(lawyer-tabs)/inbox-chat',
       params: {
         conversationId,
-        title,
+        title: title || 'Admin Team',
+        // Add flag to indicate this is an admin conversation
+        isAdminChat: 'true',
       },
     });
   }, []);
@@ -511,7 +543,7 @@ export default function LawyerInboxPage() {
       ) : (
         <FlatList
           data={sortedRows}
-          keyExtractor={(item) => String(item.conversation_id || item.id)}
+          keyExtractor={(item) => item.uniqueKey || String(item.conversation_id || item.id)}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           refreshControl={

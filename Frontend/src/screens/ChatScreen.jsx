@@ -67,6 +67,8 @@ export function ChatScreen() {
   const params = useLocalSearchParams();
   const conversationId = String(params.conversationId || params.id || '');
   const titleParam = String(params.title || 'Conversation');
+  const isUserChat = params.isUserChat === 'true';
+  const isAdminChat = params.isAdminChat === 'true';
   const listRef = useRef(null);
   const typingStopTimerRef = useRef(null);
   const [draft, setDraft] = useState('');
@@ -87,9 +89,33 @@ export function ChatScreen() {
 
   const { connectionStatus } = useSocket();
 
-  const groupedItems = useMemo(() => buildGroupedItems(messages), [messages]);
-
+  // Validate conversation type to prevent cross-contamination
   const participant = conversation?.other_participant || conversation?.citizen || conversation?.lawyer || {};
+  const participantRole = participant?.role || conversation?.other_participant_role || 'unknown';
+  
+  // Debug logging to track conversation types (reduced frequency)
+  useEffect(() => {
+    if (conversationId && participant) {
+      // Only log on conversation change, not on every render
+      console.log(`ChatScreen - Conversation ${conversationId}:`, {
+        participantName: participant.name || participant.full_name,
+        participantRole,
+        isUserChat,
+        isAdminChat,
+        currentUserRole: user?.role,
+      });
+      
+      // Warn if there's a mismatch between expected and actual conversation type
+      if (isUserChat && participantRole === 'admin') {
+        console.error('Conversation type mismatch: Expected user chat but got admin conversation');
+      }
+      if (isAdminChat && participantRole !== 'admin') {
+        console.error('Conversation type mismatch: Expected admin chat but got non-admin conversation');
+      }
+    }
+  }, [conversationId]); // Only depend on conversationId to prevent infinite loops
+
+  const groupedItems = useMemo(() => buildGroupedItems(messages), [messages]);
   const title = participant.name || titleParam;
   const subtitle = participant.specialization
     ? participant.specialization
