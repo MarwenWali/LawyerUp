@@ -38,7 +38,14 @@ async function request(method, path, body = null, isMultipart = false) {
   const options = { method, headers };
   if (body) options.body = isMultipart ? body : JSON.stringify(body);
 
-  const res = await fetch(`${BASE_URL}${path}`, options);
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, options);
+  } catch (networkError) {
+    const err = new Error(`Network error: Unable to reach ${BASE_URL}${path}. ${networkError.message}`);
+    err.isNetworkError = true;
+    throw err;
+  }
 
   let data;
   try {

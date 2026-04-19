@@ -36,6 +36,7 @@ export function useMessages(conversationId) {
     emitTyping,
     appendConversationMessages,
     setConversationMessages,
+    clearConversationMessages,
     replaceTemporaryMessage,
     removeTemporaryMessage,
     markConversationReadLocal,
@@ -85,7 +86,7 @@ export function useMessages(conversationId) {
     }
   }, [joinConversation]);
 
-  const loadMessages = useCallback(async ({ page = 1, append = false } = {}) => {
+  const loadMessages = useCallback(async ({ page = 1, prepend = false } = {}) => {
     if (!conversationId) return null;
 
     const payload = await messageService.getMessages(conversationId, {
@@ -94,10 +95,18 @@ export function useMessages(conversationId) {
     });
 
     const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
-    if (append) {
-      setConversationMessages(conversationId, [...messages, ...nextMessages]);
-    } else {
-      setConversationMessages(conversationId, nextMessages);
+    
+    // State guard: prevent updating if messages are identical
+    const currentMessages = messagesByConversation[conversationId] || [];
+    const messagesAreIdentical = currentMessages.length === nextMessages.length &&
+      currentMessages.every((msg, index) => msg.id === nextMessages[index]?.id);
+    
+    if (!messagesAreIdentical) {
+      if (prepend) {
+        setConversationMessages(conversationId, [...nextMessages, ...currentMessages]);
+      } else {
+        setConversationMessages(conversationId, nextMessages);
+      }
     }
 
     if (payload?.conversation) {
@@ -120,7 +129,7 @@ export function useMessages(conversationId) {
     }
 
     return payload;
-  }, [conversationId, messages, pagination.limit, setConversationMessages]);
+  }, [conversationId, pagination.limit, setConversationMessages, messagesByConversation]);
 
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return null;
@@ -138,7 +147,7 @@ export function useMessages(conversationId) {
   const loadOlderMessages = useCallback(async () => {
     if (!conversationId || !pagination.hasMore) return null;
     const nextPage = pagination.page + 1;
-    const payload = await loadMessages({ page: nextPage, append: true });
+    const payload = await loadMessages({ page: nextPage, prepend: true });
     if (payload?.pagination) {
       setPagination(payload.pagination);
     }
@@ -200,6 +209,8 @@ export function useMessages(conversationId) {
   useEffect(() => {
     if (!conversationId) {
       setLoading(false);
+      // Clear messages when no conversation is selected
+      clearConversationMessages(conversationId);
       return undefined;
     }
 
@@ -208,6 +219,8 @@ export function useMessages(conversationId) {
     (async () => {
       setLoading(true);
       setError(null);
+      // Clear previous conversation messages to prevent cross-contamination
+      clearConversationMessages(conversationId);
       try {
         void joinConversationWithTimeout(conversationId);
         if (!active) return;
@@ -228,7 +241,7 @@ export function useMessages(conversationId) {
     return () => {
       active = false;
     };
-  }, [conversationId, joinConversationWithTimeout, loadMessages, markAsRead]);
+  }, [conversationId]); // Only depend on conversationId to prevent infinite loops
 
   return {
     conversation,
