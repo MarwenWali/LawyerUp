@@ -1,0 +1,20 @@
+{
+  "stage1_backend": "skipped",
+  "stage2_backend": "legal_model",
+  "stage1_translation": {
+    "count": 0,
+    "exact_match": 0.0,
+    "avg_token_f1": 0.0,
+    "avg_char_similarity": 0.0
+  },
+  "stage2_legal": {
+    "count": 57,
+    "status": "ok",
+    "non_empty": 1.0,
+    "arabic_output_rate": 0.05263157894736842,
+    "legal_term_presence": 0.03508771929824561,
+    "query_answer_overlap": 0.054385964912280704,
+    "reference_token_f1": 0.0015030792721287616,
+    "composite_relevance": 0.031766713255322834
+  }
+}
