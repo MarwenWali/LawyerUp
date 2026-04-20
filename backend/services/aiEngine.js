@@ -9,7 +9,7 @@
  * Routes and controllers import from this file — they never call the AI directly.
  */
 
-const AI_ENGINE_URL = process.env.AI_ENGINE_URL || 'http://localhost:8000';
+const AI_ENGINE_URL = process.env.AI_ENGINE_URL || 'http://127.0.0.1:8001';
 
 async function postToAI(path, payload) {
   const controller = new AbortController();

@@ -70,8 +70,7 @@ Notes:
 ### 3. Run schema and seed
 ```bash
 npm run db:migrate
-npm run db:seed
-```
+npm```
 
 ### 4. Start API
 <<<<<<< HEAD

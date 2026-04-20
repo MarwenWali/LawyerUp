@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppContext } from '../context/AppContext';
 import { LanguageContext } from '../context/LanguageContext';
 import { ThemeContext } from '../context/ThemeContext';
-import { API_URL } from '../config';
+import { API_URL, AI_SERVICE_URL } from '../config';
 
 const ChatScreen = () => {
   const { promptsUsed, firstPromptTimestamp, incrementPrompt, user } = useContext(AppContext);
@@ -100,7 +100,7 @@ const ChatScreen = () => {
 
     try {
       await incrementPrompt();
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const response = await fetch(AI_SERVICE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage })
@@ -109,11 +109,10 @@ const ChatScreen = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to get response');
 
-      // Assuming the python script returns { answer: "..." }
-      // The ai_service returns whatever the python script returns
-      // The python script returns { answer: ..., sources: ... }
+      // The new /api/ai/chat proxy routes directly to the Python FastAPI engine.
+      // It returns { response: "..." } based on the AI output.
       setLoading(false);
-      setMessage(data.answer);
+      setMessage(data.response || data.answer);
     } catch (error) {
       setLoading(false);
       setMessage('Error: ' + error.message);

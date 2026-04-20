@@ -20,6 +20,14 @@ except ImportError:
     HAS_SLANG_CONVERTER = False
     logger.warning("slang_converter not available, using basic text processing")
 
+# Attempt to import knowledge base for fallback responses
+try:
+    from knowledge_base import get_fallback_response
+    HAS_KNOWLEDGE_BASE = True
+except ImportError:
+    HAS_KNOWLEDGE_BASE = False
+    logger.warning("knowledge_base not available")
+
 # Model paths to try (in order of preference)
 MODEL_PATHS = [
     os.path.join(os.getcwd(), "legal-model"),  # Primary: newly fine-tuned model
@@ -64,7 +72,7 @@ def load_model(model_path: Optional[str] = None, force_cpu: bool = False):
         force_cpu: Force CPU usage even if GPU available
         
     Returns:
-        Tuple of (tokenizer, model, device)
+        Tuple of (tokenizer, model, device) or (None, None, None) if fallback mode
     """
     global _model, _tokenizer, _device
     
@@ -81,14 +89,26 @@ def load_model(model_path: Optional[str] = None, force_cpu: bool = False):
                 break
     
     if model_path is None:
-        raise ValueError(f"Model not found in any of: {MODEL_PATHS}")
+        logger.warning(f"Model not found in any of: {MODEL_PATHS}")
+        logger.info("Falling back to knowledge base for responses")
+        _model = None
+        _tokenizer = None
+        _device = None
+        return None, None, None
     
     # Determine device
     _device = "cpu" if force_cpu else get_device()
     
     # Load tokenizer
     logger.info(f"Loading tokenizer from {model_path}...")
-    _tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    try:
+        _tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    except Exception as e:
+        logger.warning(f"Tokenizer load failed: {e}")
+        logger.info("Falling back to knowledge base for responses")
+        _model = None
+        _tokenizer = None
+        return None, None, None
     
     # Load model
     logger.info(f"Loading model from {model_path}...")
@@ -102,13 +122,20 @@ def load_model(model_path: Optional[str] = None, force_cpu: bool = False):
         )
     except Exception as e:
         logger.warning(f"Auto device load failed: {e}, trying standard load...")
-        _model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            local_files_only=True,
-            dtype=torch.float32
-        )
-        if _device == "cuda":
-            _model = _model.to(_device)
+        try:
+            _model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                local_files_only=True,
+                dtype=torch.float32
+            )
+            if _device == "cuda":
+                _model = _model.to(_device)
+        except Exception as e2:
+            logger.warning(f"Standard model load also failed: {e2}")
+            logger.info("Falling back to knowledge base for responses")
+            _model = None
+            _tokenizer = None
+            return None, None, None
     
     _model.eval()
     logger.info("✓ Model loaded successfully!")
@@ -128,6 +155,14 @@ def generate_answer(text: str, max_tokens: int = 256) -> str:
     """
     # Load model if not already loaded
     tokenizer, model, device = load_model()
+    
+    # If model failed to load, use knowledge base
+    if model is None or tokenizer is None:
+        if HAS_KNOWLEDGE_BASE:
+            logger.info("Using knowledge base fallback for response")
+            return get_fallback_response(text)
+        else:
+            return "Sorry, the AI model is currently unavailable. Please try again later."
     
     # Convert slang input to formal Arabic if converter available
     if HAS_SLANG_CONVERTER:

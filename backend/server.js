@@ -18,6 +18,7 @@ import adminRoutes from './routes/admin.js';
 import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
 import notificationsRoutes from './routes/notifications.js';
+import aiRoutes from './routes/ai.js';
 import { initializeSocket } from './socket/socketHandler.js';
 
 // Import database
@@ -94,6 +95,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -139,6 +141,8 @@ const server = httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('  POST /api/cases');
   console.log('  GET  /api/conversations');
   console.log('  POST /api/conversations');
+  console.log('  POST /api/ai/chat          (AI legal assistant proxy)');
+  console.log('  GET  /api/ai/health        (AI engine health check)');
   console.log('\nReady to accept connections.\n');
 });
 
