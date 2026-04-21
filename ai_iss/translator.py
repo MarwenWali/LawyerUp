@@ -7,8 +7,6 @@ import logging
 import os
 from typing import Optional
 
-import torch
-
 try:
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
     HAS_TRANSFORMERS = True
@@ -34,6 +32,30 @@ _BASE_TRANSLATOR_MODEL = "google/mt5-small"
 _translator_model = None
 _translator_tokenizer = None
 _translator_device = None
+_torch = None
+_torch_import_attempted = False
+
+
+def _get_torch():
+    global _torch, _torch_import_attempted
+
+    if _torch is not None:
+        return _torch
+    if os.getenv("AI_ISS_DISABLE_TORCH", "").strip().lower() in {"1", "true", "yes"}:
+        _torch_import_attempted = True
+        logger.info("AI_ISS_DISABLE_TORCH is enabled; skipping translator torch runtime.")
+        return None
+    if _torch_import_attempted:
+        return None
+
+    _torch_import_attempted = True
+    try:
+        import torch as torch_module
+        _torch = torch_module
+        return _torch
+    except Exception as exc:
+        logger.warning("PyTorch unavailable for translator stage; using rule-based fallback: %s", exc)
+        return None
 
 
 def _has_arabic(text: str) -> bool:
@@ -61,7 +83,10 @@ def _is_invalid_translation(candidate: str) -> bool:
 def _get_device(force_cpu: bool = False) -> str:
     if force_cpu:
         return "cpu"
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    torch_module = _get_torch()
+    if torch_module is None:
+        return "cpu"
+    return "cuda" if torch_module.cuda.is_available() else "cpu"
 
 
 def load_translation_model(model_path: Optional[str] = None, force_cpu: bool = False):
@@ -71,13 +96,20 @@ def load_translation_model(model_path: Optional[str] = None, force_cpu: bool = F
     if _translator_model is not None and _translator_tokenizer is not None:
         return _translator_tokenizer, _translator_model, _translator_device
 
+    torch_module = _get_torch()
+    if torch_module is None:
+        return None, None, None
+
     if not HAS_TRANSFORMERS:
         logger.warning("transformers is not available; using rule-based fallback translation")
         return None, None, None
 
     if model_path is None:
         for path in TRANSLATOR_PATHS:
-            if os.path.exists(path):
+            if os.path.exists(path) and (
+                os.path.exists(os.path.join(path, "model.safetensors")) or 
+                os.path.exists(os.path.join(path, "pytorch_model.bin"))
+            ):
                 model_path = path
                 logger.info("Found translator model at: %s", model_path)
                 break
@@ -130,7 +162,11 @@ def translate_tunisian_to_msa(text: str, max_tokens: int = 96) -> str:
     if device == "cuda":
         inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-    with torch.no_grad():
+    torch_module = _get_torch()
+    if torch_module is None:
+        return normalized
+
+    with torch_module.no_grad():
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_tokens,

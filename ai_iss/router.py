@@ -4,7 +4,9 @@ Supports Tunisian Arabic (Darija), Modern Standard Arabic, French, and English
 """
 
 import logging
-from generator import generate_legal_answer
+import re
+
+_generate_legal_answer_fn = None
 
 try:
     from translator import translate_tunisian_to_msa
@@ -30,7 +32,7 @@ LEGAL_KEYWORDS = [
     "cnss", "khedma", "contrat", "bank", "banque", "police", "7ou9ouq",
     "kanoun", "droit", "credit", "karhba", "ijara", "moukri", "salaire",
     "mchkel", "mochkla", "tashkiya", "tribunal", "justice", "law", "legal",
-    "travail", "hadhi", "7a9i", "najem", "chnowa", "chnow", "nheb",
+    "travail", "7a9i",
     "5edma", "3amil", "darar", "mohim", "mahkama", "avocate", "avocat",
     
     # Modern Standard Arabic (MSA)
@@ -61,14 +63,45 @@ FOLLOW_UP_WORDS = [
 # Common legal question patterns
 LEGAL_PATTERNS = [
     "شنية حقوق", "شنو حقوق", "ما خلصنيش", "ما يخلصنيش", "مخلصنيش",
-    "chnowa", "najem", "is it legal", "ai-je le droit",
+    "is it legal", "ai-je le droit",
     "what are my rights", "can i be fired", "fired without notice",
     "my employer", "employment contract", "labor law", "labour law"
+]
+
+# Family/personal-status legal terms (outside this assistant's labor-law scope)
+NON_LABOR_LEGAL_KEYWORDS = [
+    # Arabizi / FR / EN
+    "talak", "ntalak", "tla9", "divorce", "mariage", "marriage",
+    "spouse", "wife", "husband", "custody", "alimony", "naf9a", "nafa9a",
+    "family law", "personal status",
+    # Arabic (unicode escapes to avoid source encoding issues)
+    "\u0637\u0644\u0627\u0642",  # طلاق
+    "\u0632\u0648\u0627\u062c",  # زواج
+    "\u0632\u0648\u062c",        # زوج
+    "\u0632\u0648\u062c\u0629",  # زوجة
+    "\u0646\u0641\u0642\u0629",  # نفقة
+    "\u062d\u0636\u0627\u0646\u0629",  # حضانة
 ]
 
 # Track conversation context
 _LAST_LEGAL_QUERY = ""
 _CONVERSATION_CONTEXT = []
+
+
+def _generate_legal_answer(text: str) -> str:
+    global _generate_legal_answer_fn
+
+    if _generate_legal_answer_fn is None:
+        from generator import generate_legal_answer as generator_fn
+        _generate_legal_answer_fn = generator_fn
+
+    return _generate_legal_answer_fn(text)
+
+
+def _normalize_text(text: str) -> str:
+    lowered = (text or "").strip().lower()
+    lowered = re.sub(r"[^\w\u0600-\u06FF\s]", " ", lowered)
+    return re.sub(r"\s+", " ", lowered).strip()
 
 def detect_intent(text: str) -> str:
     """
@@ -78,13 +111,19 @@ def detect_intent(text: str) -> str:
         text: User input text
         
     Returns:
-        'legal' or 'casual'
+        'legal', 'non_labor_legal', or 'casual'
     """
-    text = (text or "").strip().lower()
+    text = _normalize_text(text)
     
     if not text:
         return "casual"
     
+    # Explicitly detect legal topics outside labor law (e.g., divorce).
+    for word in NON_LABOR_LEGAL_KEYWORDS:
+        if word in text:
+            logger.info(f"Non-labor legal keyword detected: {word}")
+            return "non_labor_legal"
+
     # Check for legal patterns
     for pattern in LEGAL_PATTERNS:
         if pattern in text:
@@ -160,19 +199,27 @@ def handle_request(text: str) -> str:
             f"سؤال المتابعة: {formal_text}\n"
             "أكمل الإجابة بشكل عملي وفق قانون الشغل التونسي."
         )
-        response = generate_legal_answer(continuation_prompt)
+        response = _generate_legal_answer(continuation_prompt)
         return response
     
-    # Detect intent (legal or casual)
+    # Detect intent (labor-legal, non-labor legal, or casual)
     intent = detect_intent(text)
-    if intent != "legal":
+    if intent == "casual":
         # Also try on normalized text
         intent = detect_intent(formal_text)
-    
+
+    if intent == "non_labor_legal":
+        logger.info("Non-labor legal query detected - outside labor-law scope")
+        return (
+            "سؤالك قانوني، لكن خارج نطاق هذا المساعد.\n"
+            "هذا النظام مختص بقانون الشغل التونسي فقط.\n"
+            "للطلاق والأحوال الشخصية، يلزم استشارة محام مختص في الأحوال الشخصية."
+        )
+
     if intent == "legal":
         logger.info("LEGAL query detected - using legal model")
         _LAST_LEGAL_QUERY = formal_text
-        response = generate_legal_answer(formal_text)
+        response = _generate_legal_answer(formal_text)
         return response
     else:
         # Casual response - encourage legal questions

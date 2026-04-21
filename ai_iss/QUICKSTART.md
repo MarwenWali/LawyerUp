@@ -130,6 +130,15 @@ chcp 65001
 - Keep prompts concise.
 - Use retrieval-backed responses (already enabled by default).
 
+### App hangs on torch import (Windows/Python 3.12)
+
+Run with torch disabled and retrieval fallback enabled:
+
+```powershell
+$env:AI_ISS_DISABLE_TORCH = "1"
+python app.py
+```
+
 ## Notes
 
 - Use the same Python interpreter for setup, training, and app runs.

@@ -6,6 +6,14 @@ import { clearSupabaseSessionCache } from '@/utils/supabaseSession';
 
 const AuthContext = createContext(null);
 
+function isInvalidRefreshTokenError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('invalid refresh token') ||
+    message.includes('refresh token not found')
+  );
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -15,9 +23,21 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function hasSupabaseSession() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) return false;
-    return Boolean(data?.session?.access_token);
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          await clearSupabaseSessionCache();
+        }
+        return false;
+      }
+      return Boolean(data?.session?.access_token);
+    } catch (error) {
+      if (isInvalidRefreshTokenError(error)) {
+        await clearSupabaseSessionCache();
+      }
+      return false;
+    }
   }
 
   async function restoreSession() {
@@ -55,10 +75,20 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    const { error } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
+    const applySession = () =>
+      supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+    let { error } = await applySession();
+    if (error && isInvalidRefreshTokenError(error)) {
+      // Recover from stale or corrupted persisted auth state, then retry once.
+      await clearSupabaseSessionCache();
+      const retryResult = await applySession();
+      error = retryResult.error;
+    }
+
     if (error && required) {
       await clearSupabaseSessionCache();
       throw new Error(error.message || 'Failed to initialize Supabase session. Please sign in again.');

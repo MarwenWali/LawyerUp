@@ -12,10 +12,15 @@ from collections import Counter
 from difflib import SequenceMatcher
 from typing import Optional
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 logger = logging.getLogger(__name__)
+
+_torch = None
+_torch_import_attempted = False
+_torch_import_error = None
+_AutoModelForCausalLM = None
+_AutoTokenizer = None
+_transformers_import_attempted = False
+_transformers_import_error = None
 
 # Model paths to try (in order of preference)
 MODEL_PATHS = [
@@ -143,12 +148,64 @@ SEMANTIC_HINT_PATTERNS = [
     (r"\b(kanoun|law|legal|juridique|قانون)\b", "قانون"),
 ]
 
+def _get_torch():
+    global _torch, _torch_import_attempted, _torch_import_error
+
+    if _torch is not None:
+        return _torch
+    if os.getenv("AI_ISS_DISABLE_TORCH", "").strip().lower() in {"1", "true", "yes"}:
+        _torch_import_attempted = True
+        logger.info("AI_ISS_DISABLE_TORCH is enabled; skipping PyTorch model runtime.")
+        return None
+    if _torch_import_attempted:
+        return None
+
+    _torch_import_attempted = True
+    try:
+        import torch as torch_module
+        _torch = torch_module
+        return _torch
+    except Exception as exc:
+        _torch_import_error = exc
+        logger.warning("PyTorch is unavailable: %s", exc)
+        return None
+
+
+def _get_transformers_classes():
+    global _AutoModelForCausalLM, _AutoTokenizer
+    global _transformers_import_attempted, _transformers_import_error
+
+    if _AutoModelForCausalLM is not None and _AutoTokenizer is not None:
+        return _AutoModelForCausalLM, _AutoTokenizer
+    if _transformers_import_attempted:
+        return None, None
+
+    _transformers_import_attempted = True
+    try:
+        from transformers import AutoModelForCausalLM as model_cls, AutoTokenizer as tokenizer_cls
+        _AutoModelForCausalLM = model_cls
+        _AutoTokenizer = tokenizer_cls
+        return _AutoModelForCausalLM, _AutoTokenizer
+    except Exception as exc:
+        _transformers_import_error = exc
+        logger.warning("transformers is unavailable: %s", exc)
+        return None, None
+
+
+def _runtime_dependency_error_message() -> str:
+    if _torch_import_error is not None:
+        return f"PyTorch import failed: {_torch_import_error}"
+    if _transformers_import_error is not None:
+        return f"Transformers import failed: {_transformers_import_error}"
+    return "Model runtime dependencies are unavailable."
+
 
 def get_device() -> str:
     """Determine the best device to use (GPU if available, otherwise CPU)."""
-    if torch.cuda.is_available():
+    torch_module = _get_torch()
+    if torch_module is not None and torch_module.cuda.is_available():
         device = "cuda"
-        logger.info("Using GPU: %s", torch.cuda.get_device_name(0))
+        logger.info("Using GPU: %s", torch_module.cuda.get_device_name(0))
         return device
 
     logger.info("Using CPU (GPU not available)")
@@ -409,6 +466,11 @@ def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
     if _model is not None and _tokenizer is not None:
         return _tokenizer, _model, _device
 
+    torch_module = _get_torch()
+    model_cls, tokenizer_cls = _get_transformers_classes()
+    if torch_module is None or model_cls is None or tokenizer_cls is None:
+        raise RuntimeError(_runtime_dependency_error_message())
+
     if model_path is None:
         for path in MODEL_PATHS:
             if os.path.exists(path):
@@ -422,7 +484,7 @@ def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
     _device = "cpu" if force_cpu else get_device()
 
     logger.info("Loading tokenizer from %s...", model_path)
-    _tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+    _tokenizer = tokenizer_cls.from_pretrained(model_path, local_files_only=True)
 
     logger.info("Loading legal model from %s...", model_path)
     try:
@@ -432,11 +494,11 @@ def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
                 message=r"Unexpected keyword arguments .* for class LoraConfig.*",
                 category=UserWarning,
             )
-            _model = AutoModelForCausalLM.from_pretrained(
+            _model = model_cls.from_pretrained(
                 model_path,
                 local_files_only=True,
                 device_map="auto" if _device == "cuda" else "cpu",
-                dtype=torch.float16 if _device == "cuda" else torch.float32,
+                dtype=torch_module.float16 if _device == "cuda" else torch_module.float32,
             )
     except Exception as exc:
         logger.warning("Auto device load failed: %s. Falling back to standard load.", exc)
@@ -446,10 +508,10 @@ def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
                 message=r"Unexpected keyword arguments .* for class LoraConfig.*",
                 category=UserWarning,
             )
-            _model = AutoModelForCausalLM.from_pretrained(
+            _model = model_cls.from_pretrained(
                 model_path,
                 local_files_only=True,
-                dtype=torch.float32,
+                dtype=torch_module.float32,
             )
         if _device == "cuda":
             _model = _model.to(_device)
@@ -461,7 +523,17 @@ def load_legal_model(model_path: Optional[str] = None, force_cpu: bool = False):
 
 def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
     """Generate a legal answer from a normalized Arabic question."""
-    tokenizer, model, device = load_legal_model()
+    try:
+        tokenizer, model, device = load_legal_model()
+        torch_module = _get_torch()
+        if torch_module is None:
+            raise RuntimeError(_runtime_dependency_error_message())
+    except Exception as exc:
+        logger.warning("Model generation unavailable; using retrieval fallback: %s", exc)
+        fallback = _retrieve_fallback_answer(question_msa)
+        if fallback:
+            return _format_legal_response(question_msa, fallback)
+        return _format_legal_response(question_msa, DEFAULT_BASIS)
 
     prompt = f"""### Instruction:
 أجب باللغة العربية الفصحى وفق قانون الشغل التونسي. قدّم جوابا واضحا ومختصرا.
@@ -480,7 +552,7 @@ def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
         max_length=512,
     ).to(device)
 
-    with torch.no_grad():
+    with torch_module.no_grad():
         output = model.generate(
             **inputs,
             max_length=min(2048, inputs["input_ids"].shape[1] + max_tokens),
@@ -513,7 +585,7 @@ def generate_legal_answer(question_msa: str, max_tokens: int = 256) -> str:
             padding=True,
             max_length=512,
         ).to(device)
-        with torch.no_grad():
+        with torch_module.no_grad():
             strict_output = model.generate(
                 **strict_inputs,
                 max_length=min(2048, strict_inputs["input_ids"].shape[1] + max_tokens),

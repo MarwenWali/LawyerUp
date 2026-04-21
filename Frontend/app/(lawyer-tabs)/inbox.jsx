@@ -55,14 +55,23 @@ function normalizeBackendConversation(conversation) {
 }
 
 function normalizeAdminConversation(conversation) {
+  const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
+  const title = participant.name || participant.full_name || conversation.other_participant_name || 'Conversation';
+
   return {
     ...conversation,
     source: 'legacy',
     conversation_id: conversation.conversation_id || conversation.id,
-    other_participant_role: 'admin',
+    other_participant_name: title,
+    other_participant_role: participant.role || conversation.other_participant_role || 'participant',
     last_message_at: conversation.last_message_at || conversation.created_at,
     unread_count: Number(conversation.unread_count || 0),
   };
+}
+
+function getConversationStableId(conversation) {
+  const rawId = conversation?.conversation_id || conversation?.id;
+  return rawId ? String(rawId) : '';
 }
 
 function resolveAdminTitle(item) {
@@ -205,13 +214,24 @@ export default function LawyerInboxPage() {
     // Deduplicate client conversations by ID
     const clientSeen = new Set();
     const deduplicatedClients = clientConvs.filter(conv => {
-      const id = conv.conversation_id || conv.id;
+      const id = getConversationStableId(conv);
+      if (!id) return false;
       if (clientSeen.has(id)) return false;
       clientSeen.add(id);
       return true;
     });
     
-    return [...adminToKeep, ...deduplicatedClients];
+    const globallyUnique = [];
+    const globalSeen = new Set();
+
+    for (const conv of [...adminToKeep, ...deduplicatedClients]) {
+      const id = getConversationStableId(conv);
+      if (!id || globalSeen.has(id)) continue;
+      globalSeen.add(id);
+      globallyUnique.push(conv);
+    }
+
+    return globallyUnique;
   }, [adminRows, backendRows]);
 
   // Sort with admin pinned to top
@@ -281,7 +301,9 @@ export default function LawyerInboxPage() {
 
       // Update admin rows
       const adminConvs = Array.isArray(adminPayload?.conversations)
-        ? adminPayload.conversations.map(normalizeAdminConversation)
+        ? adminPayload.conversations
+          .map(normalizeAdminConversation)
+          .filter(isAdminConversation)
         : [];
       setAdminRows(adminConvs);
     } catch (error) {
@@ -370,10 +392,12 @@ export default function LawyerInboxPage() {
       const existingPayload = await messagingApi.listConversations('admin_lawyer');
       const conversations = Array.isArray(existingPayload?.conversations)
         ? existingPayload.conversations
+          .map(normalizeAdminConversation)
+          .filter(isAdminConversation)
         : [];
 
       const existing = conversations[0];
-      const existingId = existing?.conversation_id || existing?.id;
+      const existingId = getConversationStableId(existing);
 
       if (existingId) {
         openLegacyConversation(existingId, 'Admin Team');
@@ -399,7 +423,7 @@ export default function LawyerInboxPage() {
   }, [loadAllConversations, openLegacyConversation, startingAdminChat]);
 
   const renderItem = useCallback(({ item }) => {
-    const conversationId = item.conversation_id || item.id;
+    const conversationId = getConversationStableId(item);
     const isAdmin = isAdminConversation(item);
     let title = '';
     let avatarLabel = '';
@@ -415,8 +439,8 @@ export default function LawyerInboxPage() {
           item={item}
           title={title}
           avatarLabel={avatarLabel}
-          preview={resolvePreview(item, Boolean(backendTypingByConversation[item.id]))}
-          isTyping={Boolean(backendTypingByConversation[item.id])}
+          preview={resolvePreview(item, Boolean(backendTypingByConversation[conversationId]))}
+          isTyping={Boolean(backendTypingByConversation[conversationId])}
           C={C}
           isAdminChat={false}
           onPress={() => openBackendConversation(item)}
@@ -489,7 +513,7 @@ export default function LawyerInboxPage() {
       ) : sortedRows.length === 0 ? (
         <FlatList
           data={[]}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => getConversationStableId(item) || `empty-${index}`}
           contentContainerStyle={styles.emptyContent}
           refreshControl={
             <RefreshControl
@@ -511,7 +535,7 @@ export default function LawyerInboxPage() {
       ) : (
         <FlatList
           data={sortedRows}
-          keyExtractor={(item) => String(item.conversation_id || item.id)}
+          keyExtractor={(item, index) => getConversationStableId(item) || `conversation-${index}`}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           refreshControl={

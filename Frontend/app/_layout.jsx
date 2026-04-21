@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useCallback, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -27,6 +27,7 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
+  const hasHiddenSplashRef = useRef(false);
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -35,10 +36,10 @@ export default function RootLayout() {
     PlayfairDisplay_700Bold,
   });
 
-  useEffect(() => {
-    if (fontsLoaded) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
+  const onLayoutRootView = useCallback(() => {
+    if (!fontsLoaded || hasHiddenSplashRef.current) return;
+    hasHiddenSplashRef.current = true;
+    SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded]);
 
   if (!fontsLoaded) return null;
@@ -49,7 +50,7 @@ export default function RootLayout() {
         <LanguageProvider>
           <AuthProvider>
             <ChatProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
+              <GestureHandlerRootView style={{ flex: 1 }} onLayout={onLayoutRootView}>
                 <KeyboardProvider>
                   <RootLayoutNav />
                 </KeyboardProvider>

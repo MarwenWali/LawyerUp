@@ -196,6 +196,17 @@ On Windows PowerShell, set UTF-8 before running:
 chcp 65001
 ```
 
+### 5) App hangs while importing PyTorch
+
+If `python app.py` stalls during `import torch` (often on some Python 3.12 installs), run in retrieval mode:
+
+```powershell
+$env:AI_ISS_DISABLE_TORCH = "1"
+python app.py
+```
+
+This skips model runtime and uses the built-in legal retrieval fallback.
+
 ## Data Format
 
 Expected input file for data prep: a JSON list in data/tunisian_legal.json.

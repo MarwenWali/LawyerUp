@@ -1,26 +1,63 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
+const REQUEST_TIMEOUT_MS = 12000;
+const DEFAULT_API_PORT = String(process.env.EXPO_PUBLIC_API_PORT || '3001');
+
+function uniq(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 // Derive the backend host from the Expo dev server URI so it works on
 // physical devices, Android emulators, and iOS simulators automatically.
-const getBaseUrl = () => {
+const getBaseUrls = () => {
   // Tunnel / deployed URL set via EXPO_PUBLIC_API_URL (works on any network)
   const tunnelUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (tunnelUrl) return tunnelUrl;
+  if (tunnelUrl) return [tunnelUrl.replace(/\/$/, '')];
 
   if (__DEV__) {
     const hostUri = Constants.expoConfig?.hostUri;
+    const ports = uniq([DEFAULT_API_PORT, '3001', '3000']);
+
     if (hostUri) {
       const host = hostUri.split(':')[0]; // strip port
-      return `http://${host}:3000`;
+      const hostCandidates = ports.map((port) => `http://${host}:${port}`);
+      const emulatorCandidates = ports.map((port) => `http://10.0.2.2:${port}`);
+      return uniq([...hostCandidates, ...emulatorCandidates]);
     }
-    // Android emulator default
-    return 'http://10.0.2.2:3000';
+    // Android emulator fallback
+    return ports.map((port) => `http://10.0.2.2:${port}`);
   }
-  return 'http://localhost:3000';
+  return [`http://localhost:${DEFAULT_API_PORT}`];
 };
 
-export const BASE_URL = getBaseUrl();
+const BASE_URL_CANDIDATES = getBaseUrls();
+export let BASE_URL = BASE_URL_CANDIDATES[0];
+
+function isRetryableNetworkError(error) {
+  if (!error) return false;
+  if (error.name === 'AbortError') return true;
+
+  const message = String(error.message || '').toLowerCase();
+  return (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('networkerror') ||
+    message.includes('socket') ||
+    message.includes('timed out') ||
+    message.includes('timeout')
+  );
+}
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // ── Token helpers ────────────────────────────────────────────────────────────
 export const getToken = () => AsyncStorage.getItem('lawyerup_token');
@@ -38,22 +75,55 @@ async function request(method, path, body = null, isMultipart = false) {
   const options = { method, headers };
   if (body) options.body = isMultipart ? body : JSON.stringify(body);
 
-  const res = await fetch(`${BASE_URL}${path}`, options);
+  const candidateUrls = uniq([BASE_URL, ...BASE_URL_CANDIDATES]);
+  let lastNetworkError = null;
 
-  let data;
-  try {
-    data = await res.json();
-  } catch {
-    data = {};
+  for (let index = 0; index < candidateUrls.length; index += 1) {
+    const baseUrl = candidateUrls[index];
+    let res;
+
+    try {
+      res = await fetchWithTimeout(`${baseUrl}${path}`, options);
+    } catch (error) {
+      if (isRetryableNetworkError(error) && index < candidateUrls.length - 1) {
+        lastNetworkError = error;
+        continue;
+      }
+
+      const networkError = new Error(
+        error?.name === 'AbortError'
+          ? 'Request timed out. Please check backend server/network and try again.'
+          : 'Network request failed. Please check backend server/network and try again.'
+      );
+      networkError.status = 0;
+      throw networkError;
+    }
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      const err = new Error(data?.error || data?.message || 'Request failed');
+      err.status = res.status;
+      throw err;
+    }
+
+    // Pin to the first working backend URL for subsequent requests.
+    BASE_URL = baseUrl;
+    return data;
   }
 
-  if (!res.ok) {
-    const err = new Error(data?.error || data?.message || 'Request failed');
-    err.status = res.status;
-    throw err;
-  }
-
-  return data;
+  const fallbackError = new Error(
+    lastNetworkError?.name === 'AbortError'
+      ? 'Request timed out. Please check backend server/network and try again.'
+      : 'Network request failed. Please check backend server/network and try again.'
+  );
+  fallbackError.status = 0;
+  throw fallbackError;
 }
 
 // ── Convenience methods ──────────────────────────────────────────────────────
