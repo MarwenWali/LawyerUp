@@ -1,6 +1,8 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import multer from 'multer';
 import path from 'path';
 import { createServer } from 'http';
@@ -28,7 +30,7 @@ import {
   isSupabaseAdminConfigured,
 } from './config/supabase.js';
 
-dotenv.config();
+// dotenv.config(); // Moved to top
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +40,10 @@ const PORT = process.env.PORT || 3000;
 const httpServer = createServer(app);
 
 // Middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 app.use(
   cors({
     origin: true, // Allow all origins in development for mobile/network testing
@@ -145,6 +151,10 @@ const server = httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('  GET  /api/ai/health        (AI engine health check)');
   console.log('\nReady to accept connections.\n');
 });
+
+// Increase timeouts for long-running AI requests
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 70000;
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

@@ -108,6 +108,26 @@ create table if not exists public.messages (
     check (char_length(trim(content)) > 0 or attachment_url is not null)
 );
 
+-- Ensure sender_id points to auth.users if table already existed
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint 
+    WHERE conname = 'messages_sender_id_fkey' 
+    AND conrelid = 'public.messages'::regclass
+  ) THEN
+    -- Check if it already points to auth.users (not easily done in pure SQL without complex queries)
+    -- So we just drop and recreate it to be sure.
+    ALTER TABLE public.messages DROP CONSTRAINT messages_sender_id_fkey;
+  END IF;
+  
+  ALTER TABLE public.messages 
+    ADD CONSTRAINT messages_sender_id_fkey 
+    FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Could not update messages_sender_id_fkey: %', SQLERRM;
+END $$;
+
 create table if not exists public.message_reads (
   id uuid primary key default gen_random_uuid(),
   message_id uuid not null references public.messages(id) on delete cascade,
@@ -571,7 +591,7 @@ with check (
 
 -- 7) Seed data (best effort, only if compatible users exist)
 DO $$
-declare
+DECLARE
   v_admin uuid;
   v_lawyer uuid;
   v_user uuid;
@@ -731,6 +751,8 @@ begin
       on conflict (message_id, user_id) do nothing;
     end if;
   end if;
-end$$;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Seed data failed: %', SQLERRM;
+END$$;
 
 commit;

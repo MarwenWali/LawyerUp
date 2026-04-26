@@ -1,5 +1,11 @@
 import pool from '../config/database.js';
-import { getAIResponse } from '../services/aiEngine.js';
+import { GoogleGenAI } from '@google/genai';
+import { supabaseAdmin } from '../config/supabase.js';
+
+const ai = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: { timeout: 30000 }
+});
 
 export async function getSessions(req, res) {
   try {
@@ -160,11 +166,53 @@ export async function generateReply(req, res) {
 
     let aiText;
     try {
-      aiText = await getAIResponse(content, historyRows, {
-        userId: req.user.id,
-        sessionId: req.params.id,
+      // 1. Vectorize
+      const embedResult = await ai.models.embedContent({
+        model: 'gemini-embedding-001',
+        contents: content,
+        config: { outputDimensionality: 768 },
       });
+      const query_embedding = embedResult.embeddings[0].values;
+
+      // 2. Query Supabase
+      const { data: docs, error: rpcError } = await supabaseAdmin.rpc('match_legal_docs', {
+        query_embedding,
+        match_threshold: 0.5,
+        match_count: 3,
+      });
+
+      if (rpcError) throw new Error(`Supabase RPC Error: ${rpcError.message}`);
+
+      let contextText = '';
+      if (docs && docs.length > 0) {
+        contextText = docs.map((doc) => {
+          const articleName = doc.metadata?.article_name || 'Unknown Article';
+          const source = doc.metadata?.source || 'Unknown Source';
+          return `[Source: ${source} | Article: ${articleName}]\n${doc.content}`;
+        }).join('\n\n');
+      }
+
+      // 3. Inference
+      const systemInstruction = `You are the LawyerUp AI Assistant, an expert in Tunisian Law. Use the provided Arabic legal context to answer the user's question accurately.
+DETECTION: Identify the language the user is speaking (Tunisian Derja, Standard Arabic, French, or English) and respond ONLY in that exact language. If the answer isn't in the context, inform them politely in their language.
+
+CITATION: At the end of your response, you MUST cite the article_name from the metadata provided in the context so the user knows which law is being cited.
+
+Context:
+${contextText}`;
+
+      const chatResult = await ai.models.generateContent({
+        model: 'gemini-flash-latest',
+        contents: content,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.3,
+        },
+      });
+
+      aiText = chatResult.text;
     } catch (aiError) {
+      console.log('AI Error:', aiError);
       console.error('POST /chat/sessions/:id/reply ai error:', aiError);
       await pool.query('DELETE FROM chat_messages WHERE id = $1', [userMessage.id]);
       return res.status(502).json({ error: 'AI assistant unavailable right now. Please try again.' });

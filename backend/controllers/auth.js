@@ -209,18 +209,22 @@ export async function login(req, res) {
     let supabaseSession = null;
     
     try {
-      const bridgeResult = await ensureSupabaseMessagingIdentity({
+      // Add a 5 second timeout to the Supabase bridge to prevent login hangs
+      const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase bridge timeout')), ms));
+      
+      const bridgePromise = ensureSupabaseMessagingIdentity({
         publicUserId: user.id,
         email: user.email,
         role: user.role,
         fullName: user.full_name,
         password,
       });
+
+      const bridgeResult = await Promise.race([bridgePromise, timeout(5000)]);
       supabaseSession = toSupabaseSessionPayload(bridgeResult.session);
     } catch (supabaseError) {
-      console.warn('Supabase messaging integration failed:', supabaseError.message);
-      // Continue with login even if Supabase messaging integration fails
-      // The JWT token will still work for authentication
+      console.warn('Supabase messaging integration skipped or failed:', supabaseError.message);
+      // Continue with login even if Supabase messaging integration fails or times out
     }
 
     const token = jwt.sign(

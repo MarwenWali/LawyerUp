@@ -4,11 +4,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const connectionString = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
 const usingManagedPostgres = Boolean(
-  process.env.SUPABASE_DB_URL ||
-  (connectionString && connectionString.includes('supabase.co'))
+  (connectionString && connectionString.includes('supabase.co')) ||
+  (connectionString && connectionString.includes('pooler.supabase.com'))
 );
+
+console.log(`[DB Config] Using string: ${connectionString ? 'Yes (hidden)' : 'No'}`);
+console.log(`[DB Config] Managed logic: ${usingManagedPostgres}`);
 
 const poolConfig = connectionString
   ? {
@@ -26,6 +29,8 @@ if (process.env.DB_SSL === 'false') {
   poolConfig.ssl = false;
 } else if (usingManagedPostgres) {
   poolConfig.ssl = { rejectUnauthorized: false };
+} else {
+  poolConfig.ssl = false; // Default off for local
 }
 
 const pool = new Pool({
