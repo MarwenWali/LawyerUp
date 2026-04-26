@@ -19,6 +19,8 @@
     },
     "android": {
       "package": "com.lawyerup",
+      "softwareKeyboardLayoutMode": "resize",
+      "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "backgroundColor": "#14213D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
