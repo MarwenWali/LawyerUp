@@ -1,92 +1,52 @@
-import { getSupabaseAccessToken } from './storage.js';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getToken } from './storage.js';
 
-function decodeJwtPayload(token) {
-  const parts = String(token || '').split('.');
-  if (parts.length < 2) return null;
-
-  try {
-    const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function getFunctionsBaseUrl() {
-  const token = getSupabaseAccessToken();
-  if (!token) {
-    throw new Error('Missing Supabase session. Sign out and sign in again.');
-  }
-
-  const payload = decodeJwtPayload(token);
-  const iss = payload?.iss;
-  if (!iss) {
-    throw new Error('Invalid Supabase access token');
-  }
-
-  const hostname = new URL(iss).hostname;
-  const projectRef = hostname.split('.')[0];
-  return {
-    token,
-    base: `https://${projectRef}.functions.supabase.co`,
-  };
-}
-
-async function request(path, { method = 'GET', body, query } = {}) {
-  const { token, base } = getFunctionsBaseUrl();
-  const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const qs = new URLSearchParams(query || {}).toString();
-  const url = `${base}/${path}${qs ? `?${qs}` : ''}`;
+async function request(endpoint, options = {}) {
+  const token = getToken();
+  const url = `${API_BASE_URL}${endpoint}`;
 
   const res = await fetch(url, {
-    method,
+    method: options.method || 'GET',
     headers: {
-      Authorization: `Bearer ${token}`,
-      ...(apikey ? { apikey } : {}),
-      ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(options.body ? { body: JSON.stringify(options.body) } : {}),
   });
 
-  let payload = {};
-  try {
-    payload = await res.json();
-  } catch {
-    payload = {};
-  }
-
   if (!res.ok) {
-    throw new Error(payload.error || `Messaging request failed (${res.status})`);
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.error || `Messaging Error: ${res.status}`);
   }
 
-  return payload;
+  return res.json();
 }
 
 export const messagingAPI = {
+  // listConversations returns { conversations: [...] }
   listConversations: (type = 'admin_lawyer') =>
-    request('conversations-list', { method: 'GET', query: { type } }),
+    request('/api/conversations'),
 
+  // createConversation returns { conversation: { id, ... } }
   createConversation: (targetUserId) =>
-    request('conversations-create', {
+    request('/api/conversations', {
       method: 'POST',
-      body: { type: 'admin_lawyer', target_user_id: targetUserId },
+      body: { participantId: targetUserId },
     }),
 
+  // listMessages returns { messages: [...] }
   listMessages: (conversationId, limit = 50) =>
-    request('conversations-messages', {
-      method: 'GET',
-      query: { conversation_id: conversationId, limit },
-    }),
+    request(`/api/conversations/${conversationId}/messages?limit=${limit}`),
 
+  // sendMessage returns { message: { ... } }
   sendMessage: (conversationId, content) =>
-    request('send-message', {
+    request(`/api/conversations/${conversationId}/messages`, {
       method: 'POST',
-      body: { conversation_id: conversationId, content },
+      body: { content },
     }),
 
   markRead: (conversationId) =>
-    request('conversations-read', {
-      method: 'POST',
-      body: { conversation_id: conversationId },
+    request(`/api/conversations/${conversationId}/read`, {
+      method: 'PATCH',
     }),
 };
