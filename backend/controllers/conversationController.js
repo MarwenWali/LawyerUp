@@ -137,6 +137,25 @@ function buildConversationQuery(whereClause) {
   `;
 }
 
+let hasConversationTypeColumnCache = null;
+
+async function hasConversationTypeColumn() {
+  if (typeof hasConversationTypeColumnCache === 'boolean') {
+    return hasConversationTypeColumnCache;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_name = 'conversations'
+       AND column_name = 'type'
+     LIMIT 1`
+  );
+
+  hasConversationTypeColumnCache = rows.length > 0;
+  return hasConversationTypeColumnCache;
+}
+
 async function fetchConversationRow(conversationId, userId, currentRole) {
   const { rows } = await pool.query(
     buildConversationQuery('WHERE c.id = $3 AND (c.citizen_id = $2 OR c.lawyer_id = $2)'),
@@ -147,13 +166,19 @@ async function fetchConversationRow(conversationId, userId, currentRole) {
 }
 
 async function fetchConversationPair(citizenId, lawyerId, type) {
-  // Match on type if provided, otherwise fall back to any pair
-  if (type) {
-    const { rows } = await pool.query(
-      'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 AND type = $3 LIMIT 1',
-      [citizenId, lawyerId, type]
-    );
-    if (rows[0]) return rows[0];
+  // Match on type only when the schema supports it.
+  if (type && await hasConversationTypeColumn()) {
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 AND type = $3 LIMIT 1',
+        [citizenId, lawyerId, type]
+      );
+      if (rows[0]) return rows[0];
+    } catch (error) {
+      // Fallback for environments where the type column is not present.
+      if (error?.code !== '42703') throw error;
+      hasConversationTypeColumnCache = false;
+    }
   }
   const { rows } = await pool.query(
     'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 LIMIT 1',
@@ -212,23 +237,17 @@ export async function startConversation(req, res) {
     // Determine type: admin<->lawyer chats use 'admin_lawyer', citizen<->lawyer use 'lawyer_user'
     const convType = (currentRole === 'admin' || targetRole === 'admin') ? 'admin_lawyer' : 'lawyer_user';
 
-    // For admin_lawyer chats, admin occupies the citizen_id slot
-    const citizenId = (currentRole === 'lawyer' && targetRole !== 'admin') ? targetUser.id
-      : (currentRole === 'admin') ? req.user.id
-      : req.user.id;
+    // Keep the non-lawyer participant in citizen_id and the lawyer in lawyer_id.
+    const citizenId = (currentRole === 'lawyer') ? targetUser.id : req.user.id;
     const lawyerId = (currentRole === 'lawyer') ? req.user.id : targetUser.id;
 
-    let conversation = await fetchConversationPair(citizenId, lawyerId, convType);
+    const hasTypeCol = await hasConversationTypeColumn();
+    const effectiveType = hasTypeCol ? convType : null;
+
+    let conversation = await fetchConversationPair(citizenId, lawyerId, effectiveType);
     const wasCreated = !conversation;
 
     if (!conversation) {
-      // Check if a type column exists before including it
-      const colCheck = await pool.query(
-        `SELECT 1 FROM information_schema.columns
-         WHERE table_name = 'conversations' AND column_name = 'type' LIMIT 1`
-      );
-      const hasTypeCol = colCheck.rows.length > 0;
-
       const insertQuery = hasTypeCol
         ? `INSERT INTO conversations (citizen_id, lawyer_id, type)
            VALUES ($1, $2, $3)
@@ -245,7 +264,7 @@ export async function startConversation(req, res) {
       if (insertResult.rows.length > 0) {
         conversation = insertResult.rows[0];
       } else {
-        conversation = await fetchConversationPair(citizenId, lawyerId, convType);
+        conversation = await fetchConversationPair(citizenId, lawyerId, effectiveType);
       }
     }
 
@@ -268,8 +287,17 @@ export async function listConversations(req, res) {
       return res.status(403).json({ error: 'Only citizens, lawyers, and admins can view conversations' });
     }
 
+    const requestedType = String(req.query?.type || '').toLowerCase();
+    let whereClause = 'WHERE c.citizen_id = $2 OR c.lawyer_id = $2';
+
+    if (requestedType === 'admin_lawyer') {
+      whereClause += " AND (citizen.role = 'admin' OR lawyer.role = 'admin')";
+    } else if (requestedType === 'lawyer_user') {
+      whereClause += " AND citizen.role <> 'admin' AND lawyer.role <> 'admin'";
+    }
+
     const { rows } = await pool.query(
-      buildConversationQuery('WHERE c.citizen_id = $2 OR c.lawyer_id = $2'),
+      buildConversationQuery(whereClause),
       [normalizeRoleLabel(req.user.role), req.user.id]
     );
 

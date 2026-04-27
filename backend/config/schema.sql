@@ -460,14 +460,11 @@ BEGIN
       AND table_name = 'messages'
       AND column_name = 'conversation_id'
   ) THEN
-    -- Supabase conversation messaging table uses auth.users ids.
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_case_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
     ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
-    ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_sender_id_fkey1;
     ALTER TABLE messages
       ADD CONSTRAINT messages_sender_id_fkey
-      FOREIGN KEY (sender_id) REFERENCES auth.users(id) ON DELETE CASCADE NOT VALID;
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE NOT VALID;
     ALTER TABLE messages
       ADD CONSTRAINT messages_conversation_id_fkey
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE NOT VALID;

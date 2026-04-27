@@ -15,7 +15,9 @@ export const messagingApi = {
     }),
 
   listConversations: (type) =>
-    api.get('/api/conversations'),
+    api.get(type
+      ? `/api/conversations?type=${encodeURIComponent(type)}`
+      : '/api/conversations'),
 
   listMessages: (conversationId, { limit = 30, before } = {}) =>
     api.get(`/api/conversations/${conversationId}/messages?limit=${limit}`),
