@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChatContext } from '@/src/contexts/ChatContext';
 import { messageService } from '@/src/services/messageService';
+import { messagingApi } from '@/services/messagingApi';
 
 function buildOptimisticMessage({ conversationId, user, content, clientMessageId }) {
   const now = new Date().toISOString();
@@ -89,24 +90,20 @@ export function useMessages(conversationId) {
   const loadMessages = useCallback(async ({ page = 1, prepend = false } = {}) => {
     if (!conversationId) return null;
 
-    const payload = await messageService.getMessages(conversationId, {
-      page,
-      limit: pagination.limit,
-    });
+    const payload = (!prepend && page === 1)
+      ? await messagingApi.listMessages(conversationId, { limit: 100 })
+      : await messageService.getMessages(conversationId, {
+        page,
+        limit: pagination.limit,
+      });
 
     const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
-    
-    // State guard: prevent updating if messages are identical
     const currentMessages = messagesByConversation[conversationId] || [];
-    const messagesAreIdentical = currentMessages.length === nextMessages.length &&
-      currentMessages.every((msg, index) => msg.id === nextMessages[index]?.id);
-    
-    if (!messagesAreIdentical) {
-      if (prepend) {
-        setConversationMessages(conversationId, [...nextMessages, ...currentMessages]);
-      } else {
-        setConversationMessages(conversationId, nextMessages);
-      }
+
+    if (prepend) {
+      setConversationMessages(conversationId, [...nextMessages, ...currentMessages]);
+    } else {
+      setConversationMessages(conversationId, nextMessages);
     }
 
     if (payload?.conversation) {
@@ -129,13 +126,13 @@ export function useMessages(conversationId) {
     }
 
     return payload;
-  }, [conversationId, pagination.limit, setConversationMessages, messagesByConversation]);
+  }, [conversationId, messagesByConversation, pagination.limit, setConversationMessages]);
 
   const refreshMessages = useCallback(async () => {
     if (!conversationId) return null;
     setRefreshing(true);
     try {
-      return await loadMessages({ page: 1, append: false });
+      return await loadMessages({ page: 1, prepend: false });
     } catch (err) {
       setError(err?.message || 'Failed to refresh messages');
       throw err;
@@ -224,7 +221,7 @@ export function useMessages(conversationId) {
       try {
         void joinConversationWithTimeout(conversationId);
         if (!active) return;
-        await loadMessages({ page: 1, append: false });
+        await loadMessages({ page: 1, prepend: false });
         if (!active) return;
         await markAsRead();
       } catch (err) {
@@ -242,6 +239,16 @@ export function useMessages(conversationId) {
       active = false;
     };
   }, [conversationId]); // Only depend on conversationId to prevent infinite loops
+
+  useEffect(() => {
+    if (!conversationId) return undefined;
+
+    const intervalId = setInterval(() => {
+      loadMessages({ page: 1, prepend: false }).catch(() => {});
+    }, 1400);
+
+    return () => clearInterval(intervalId);
+  }, [conversationId, loadMessages]);
 
   return {
     conversation,

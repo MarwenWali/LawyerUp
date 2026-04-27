@@ -203,8 +203,12 @@ export default function UserInboxPage() {
       }, 220);
     };
 
+    const inboxSyncChannelName = `user-inbox-sync-${user.id}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+
     const dataChannel = supabase
-      .channel(`user-inbox-sync-${user.id}`)
+      .channel(inboxSyncChannelName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
         scheduleInboxRefresh();
         loadChatMessages().catch(() => {});
@@ -260,8 +264,12 @@ export default function UserInboxPage() {
 
       if (!selectedConversation?.id || !user?.id) return;
 
+      const conversationChannelName = `conversation-${selectedConversation.id}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
       const dataChannel = supabase
-        .channel(`conversation-${selectedConversation.id}`)
+        .channel(conversationChannelName)
         .on(
           'postgres_changes',
           {

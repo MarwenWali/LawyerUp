@@ -23,6 +23,7 @@ export default function Messages() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const messagesEndRef = useRef(null);
+  const liveRefreshInFlightRef = useRef(false);
 
   const scrollToBottom = (behavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -68,9 +69,25 @@ export default function Messages() {
       const payload = await messagingAPI.listMessages(conversationId, 100);
       const rows = Array.isArray(payload?.messages) ? payload.messages : [];
       const sorted = [...rows].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      setMessages(sorted);
-      if (!silent) setTimeout(() => scrollToBottom('auto'), 50);
-      await messagingAPI.markRead(conversationId);
+      let shouldScroll = !silent;
+      setMessages((prev) => {
+        const hasChanged = prev.length !== sorted.length
+          || prev.some((msg, index) => msg.id !== sorted[index]?.id || msg.is_read !== sorted[index]?.is_read);
+
+        if (!hasChanged) return prev;
+
+        if (silent) {
+          const prevLastId = prev[prev.length - 1]?.id;
+          const nextLastId = sorted[sorted.length - 1]?.id;
+          shouldScroll = prevLastId !== nextLastId;
+        }
+
+        return sorted;
+      });
+
+      if (shouldScroll) {
+        setTimeout(() => scrollToBottom(silent ? 'smooth' : 'auto'), 50);
+      }
     } catch (error) {
       console.error('Load messages error:', error);
     }
@@ -90,6 +107,21 @@ export default function Messages() {
     } else {
       setMessages([]);
     }
+  }, [activeConversation?.id, loadMessages]);
+
+  useEffect(() => {
+    if (!activeConversation?.id) return undefined;
+
+    const intervalId = setInterval(() => {
+      if (liveRefreshInFlightRef.current) return;
+      liveRefreshInFlightRef.current = true;
+
+      loadMessages(activeConversation.id, { silent: true }).finally(() => {
+        liveRefreshInFlightRef.current = false;
+      });
+    }, 1200);
+
+    return () => clearInterval(intervalId);
   }, [activeConversation?.id, loadMessages]);
 
   // Unified List of "Discussions"

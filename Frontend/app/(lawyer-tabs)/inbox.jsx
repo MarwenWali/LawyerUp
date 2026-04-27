@@ -278,7 +278,7 @@ export default function LawyerInboxPage() {
   const openLegacyConversation = useCallback((conversationId, title) => {
     // Ensure this is treated as an admin conversation
     router.push({
-      pathname: '/(lawyer-tabs)/inbox-chat',
+      pathname: '/(messaging)/chat',
       params: {
         conversationId,
         title: title || 'Admin Team',
@@ -343,9 +343,13 @@ export default function LawyerInboxPage() {
       }, 220);
     };
 
+    const inboxSyncChannelName = `lawyer-inbox-sync-${user.id}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+
     // Listen for new messages
     const dataChannel = supabase
-      .channel(`lawyer-inbox-sync-${user.id}`)
+      .channel(inboxSyncChannelName)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
         scheduleRefresh();
       })

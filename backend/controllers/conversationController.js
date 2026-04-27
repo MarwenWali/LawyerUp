@@ -1,9 +1,5 @@
 import pool from '../config/database.js';
 
-function isCitizenRole(role) {
-  return role === 'citizen' || role === 'user';
-}
-
 function normalizeRoleLabel(role) {
   if (!role) return 'citizen';
   const normalized = String(role).toLowerCase();
@@ -363,4 +359,4 @@ export async function markConversationRead(req, res) {
   }
 }
 
-export { buildConversationShape, fetchConversationRow, isCitizenRole, normalizeRoleLabel };
+export { buildConversationShape, fetchConversationRow, normalizeRoleLabel };

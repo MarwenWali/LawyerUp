@@ -126,7 +126,6 @@ export function ChatProvider({ children }) {
   const { user, isLoading } = useAuth();
   const socketRef = useRef(null);
   const currentUserIdRef = useRef(null);
-  const currentConversationsRef = useRef([]);
   const [conversations, setConversations] = useState([]);
   const [messagesByConversation, setMessagesByConversation] = useState({});
   const [typingByConversation, setTypingByConversation] = useState({});
@@ -186,49 +185,14 @@ export function ChatProvider({ children }) {
 
   const appendConversationMessages = useCallback((conversationId, incomingMessages) => {
     if (!conversationId) return;
-    
-    // Get the conversation to validate message types before appending
-    const currentConversations = currentConversationsRef.current || [];
-    const existingConversation = currentConversations.find(conv => conv.id === conversationId);
-    
-    if (existingConversation) {
-      const participantRole = existingConversation.other_participant?.role || existingConversation.other_participant_role || 'unknown';
-      
-      // Validate incoming messages match the conversation type
-      const validMessages = (incomingMessages || []).filter(message => {
-        const senderRole = message.sender_role || message.sender?.role || 'unknown';
-        
-        // Only allow messages that match the conversation type
-        if (participantRole === 'admin') {
-          return senderRole === 'admin' || senderRole === 'unknown';
-        } else {
-          return senderRole !== 'admin';
-        }
-      });
-      
-      // Only proceed if we have valid messages
-      if (validMessages.length === 0) {
-        console.warn(`No valid messages for conversation ${conversationId} with participant role ${participantRole}`);
-        return;
-      }
-      
-      setMessagesByConversation((prev) => {
-        const current = prev[conversationId] || [];
-        return {
-          ...prev,
-          [conversationId]: updateMessages(current, validMessages),
-        };
-      });
-    } else {
-      // If conversation doesn't exist, proceed with original logic
-      setMessagesByConversation((prev) => {
-        const current = prev[conversationId] || [];
-        return {
-          ...prev,
-          [conversationId]: updateMessages(current, incomingMessages || []),
-        };
-      });
-    }
+
+    setMessagesByConversation((prev) => {
+      const current = prev[conversationId] || [];
+      return {
+        ...prev,
+        [conversationId]: updateMessages(current, incomingMessages || []),
+      };
+    });
   }, []);
 
   const replaceTemporaryMessage = useCallback((conversationId, clientMessageId, savedMessage) => {
@@ -307,28 +271,6 @@ export function ChatProvider({ children }) {
     const message = payload?.message;
     if (!conversationId || !message) return;
 
-    // Use a ref to get current conversations without creating dependency
-    const currentConversations = currentConversationsRef.current || [];
-    
-    // Get the conversation to check its type
-    const existingConversation = currentConversations.find(conv => conv.id === conversationId);
-    
-    // If conversation exists, check if it's the correct type before processing
-    if (existingConversation) {
-      const participantRole = existingConversation.other_participant?.role || existingConversation.other_participant_role || 'unknown';
-      
-      // Only process messages for conversations that match their intended type
-      // This prevents user messages from appearing in admin conversations and vice versa
-      if ((participantRole === 'admin' && message.sender_role !== 'admin') ||
-          (participantRole !== 'admin' && message.sender_role === 'admin')) {
-        console.warn(`Message type mismatch for conversation ${conversationId}:`, {
-          conversationParticipantRole: participantRole,
-          messageSenderRole: message.sender_role,
-        });
-        return; // Don't process messages that don't match the conversation type
-      }
-    }
-
     if (payload?.conversation) {
       const incomingConversation = normalizeConversation(payload.conversation, currentUserIdRef.current);
       setConversations((prev) => {
@@ -393,6 +335,8 @@ export function ChatProvider({ children }) {
     const conversation = payload?.conversation;
     if (!conversation?.id) return;
 
+    const conversationId = String(conversation.id);
+    const message = payload?.message || null;
     const normalized = normalizeConversation(conversation, currentUserIdRef.current);
     setConversations((prev) => {
       const exists = prev.some((item) => item.id === normalized.id);
@@ -405,6 +349,20 @@ export function ChatProvider({ children }) {
         const bTime = new Date(b.last_message_at || b.created_at || 0).getTime();
         return bTime - aTime;
       });
+    });
+
+    if (!message) return;
+
+    setMessagesByConversation((prev) => {
+      const current = prev[conversationId] || [];
+      if (current.some((item) => item.id === message.id)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [conversationId]: sortByDate([...current, message]),
+      };
     });
   }, []);
 
@@ -442,7 +400,6 @@ export function ChatProvider({ children }) {
 
   useEffect(() => {
     currentUserIdRef.current = user?.id || null;
-    currentConversationsRef.current = conversations;
 
     if (isLoading) {
       return;

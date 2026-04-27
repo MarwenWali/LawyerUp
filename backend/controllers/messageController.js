@@ -168,21 +168,25 @@ export async function getConversationMessages(req, res) {
     const [countResult, messagesResult] = await Promise.all([
       pool.query('SELECT COUNT(*)::int AS total FROM messages WHERE conversation_id = $1', [conversation.id]),
       pool.query(
-        `SELECT
-           m.id,
-           m.conversation_id,
-           m.sender_id,
-           m.content,
-           m.is_read,
-           m.created_at,
-           u.full_name AS sender_name,
-           u.role AS sender_role,
-           u.profile_photo_url AS sender_photo
-         FROM messages m
-         JOIN users u ON u.id = m.sender_id
-         WHERE m.conversation_id = $1
-         ORDER BY m.created_at ASC, m.id ASC
-         LIMIT $2 OFFSET $3`,
+        `SELECT *
+         FROM (
+           SELECT
+             m.id,
+             m.conversation_id,
+             m.sender_id,
+             m.content,
+             m.is_read,
+             m.created_at,
+             u.full_name AS sender_name,
+             u.role AS sender_role,
+             u.profile_photo_url AS sender_photo
+           FROM messages m
+           JOIN users u ON u.id = m.sender_id
+           WHERE m.conversation_id = $1
+           ORDER BY m.created_at DESC, m.id DESC
+           LIMIT $2 OFFSET $3
+         ) recent_page
+         ORDER BY recent_page.created_at ASC, recent_page.id ASC`,
         [conversation.id, limit, offset]
       ),
     ]);
@@ -234,4 +238,3 @@ export async function sendConversationMessage(req, res) {
   }
 }
 
-export { buildMessageShape, ensureConversationAccess, sanitizeMessageContent };

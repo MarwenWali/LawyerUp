@@ -9,7 +9,7 @@ export const messagingApi = {
     return data;
   },
 
-  createConversation: (type, targetUserId) =>
+  createConversation: (_type, targetUserId) =>
     api.post('/api/conversations', {
       participantId: targetUserId,
     }),
@@ -19,7 +19,7 @@ export const messagingApi = {
       ? `/api/conversations?type=${encodeURIComponent(type)}`
       : '/api/conversations'),
 
-  listMessages: (conversationId, { limit = 30, before } = {}) =>
+  listMessages: (conversationId, { limit = 30 } = {}) =>
     api.get(`/api/conversations/${conversationId}/messages?limit=${limit}`),
 
   sendMessage: ({ conversationId, content }) =>

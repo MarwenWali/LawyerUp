@@ -575,6 +575,10 @@ declare
   v_admin uuid;
   v_lawyer uuid;
   v_user uuid;
+  v_sender_fk_schema text;
+  v_sender_fk_table text;
+  v_admin_message_sender uuid;
+  v_lawyer_message_sender uuid;
   v_admin_lawyer_conversation uuid;
   v_lawyer_user_conversation uuid;
   v_message_id uuid;
@@ -650,6 +654,38 @@ begin
     limit 1;
   end if;
 
+  -- Determine the active FK target for messages.sender_id so seed data works
+  -- in both legacy schemas (public.users) and auth-backed schemas (auth.users).
+  select ref_ns.nspname, ref_tbl.relname
+  into v_sender_fk_schema, v_sender_fk_table
+  from pg_constraint fk
+  join pg_class msg_tbl on msg_tbl.oid = fk.conrelid
+  join pg_namespace msg_ns on msg_ns.oid = msg_tbl.relnamespace
+  join pg_class ref_tbl on ref_tbl.oid = fk.confrelid
+  join pg_namespace ref_ns on ref_ns.oid = ref_tbl.relnamespace
+  join unnest(fk.conkey) as key_col(attnum) on true
+  join pg_attribute att on att.attrelid = msg_tbl.oid and att.attnum = key_col.attnum
+  where fk.contype = 'f'
+    and msg_ns.nspname = 'public'
+    and msg_tbl.relname = 'messages'
+    and att.attname = 'sender_id'
+  limit 1;
+
+  if v_sender_fk_schema = 'public' and v_sender_fk_table = 'users' then
+    select coalesce(
+      (select aul.public_user_id from public.auth_user_links aul where aul.auth_user_id = v_admin limit 1),
+      v_admin
+    ) into v_admin_message_sender;
+
+    select coalesce(
+      (select aul.public_user_id from public.auth_user_links aul where aul.auth_user_id = v_lawyer limit 1),
+      v_lawyer
+    ) into v_lawyer_message_sender;
+  else
+    v_admin_message_sender := v_admin;
+    v_lawyer_message_sender := v_lawyer;
+  end if;
+
   -- Seed: admin <-> lawyer thread
   if v_admin is not null and v_lawyer is not null then
     select c.id into v_admin_lawyer_conversation
@@ -680,14 +716,24 @@ begin
     if not exists (
       select 1 from public.messages m
       where m.conversation_id = v_admin_lawyer_conversation
-    ) then
+    ) and v_admin_message_sender is not null
+      and (
+        (v_sender_fk_schema = 'public' and v_sender_fk_table = 'users' and exists (
+          select 1 from public.users pu where pu.id = v_admin_message_sender
+        ))
+        or
+        ((v_sender_fk_schema is null or v_sender_fk_schema = 'auth')
+          and exists (select 1 from auth.users au where au.id = v_admin_message_sender))
+      ) then
       insert into public.messages (conversation_id, sender_id, content)
-      values (v_admin_lawyer_conversation, v_admin, 'Welcome to the admin-lawyer channel. Phase 1 seed message.')
+      values (v_admin_lawyer_conversation, v_admin_message_sender, 'Welcome to the admin-lawyer channel. Phase 1 seed message.')
       returning id into v_message_id;
 
-      insert into public.message_reads (message_id, user_id)
-      values (v_message_id, v_admin)
-      on conflict (message_id, user_id) do nothing;
+      if v_message_id is not null then
+        insert into public.message_reads (message_id, user_id)
+        values (v_message_id, v_admin)
+        on conflict (message_id, user_id) do nothing;
+      end if;
     end if;
   end if;
 
@@ -721,14 +767,24 @@ begin
     if not exists (
       select 1 from public.messages m
       where m.conversation_id = v_lawyer_user_conversation
-    ) then
+    ) and v_lawyer_message_sender is not null
+      and (
+        (v_sender_fk_schema = 'public' and v_sender_fk_table = 'users' and exists (
+          select 1 from public.users pu where pu.id = v_lawyer_message_sender
+        ))
+        or
+        ((v_sender_fk_schema is null or v_sender_fk_schema = 'auth')
+          and exists (select 1 from auth.users au where au.id = v_lawyer_message_sender))
+      ) then
       insert into public.messages (conversation_id, sender_id, content)
-      values (v_lawyer_user_conversation, v_lawyer, 'Hello, your case has been accepted. We can discuss details here.')
+      values (v_lawyer_user_conversation, v_lawyer_message_sender, 'Hello, your case has been accepted. We can discuss details here.')
       returning id into v_message_id;
 
-      insert into public.message_reads (message_id, user_id)
-      values (v_message_id, v_lawyer)
-      on conflict (message_id, user_id) do nothing;
+      if v_message_id is not null then
+        insert into public.message_reads (message_id, user_id)
+        values (v_message_id, v_lawyer)
+        on conflict (message_id, user_id) do nothing;
+      end if;
     end if;
   end if;
 end$$;
