@@ -1,11 +1,42 @@
 import pool from '../config/database.js';
 import { GoogleGenAI } from '@google/genai';
 import { supabaseAdmin } from '../config/supabase.js';
+import { lawyerAppTools, getLawyers, sendMessageToLawyer } from '../services/aiTools.js';
 
 const ai = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: { timeout: 30000 }
 });
+
+// ── Model fallback chain (confirmed available on this API key) ──────────────
+// gemini-2.5-flash-lite: fast, generous quota, confirmed working
+// gemini-2.5-flash: more powerful fallback
+// gemini-2.0-flash: last resort
+const GEMINI_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+
+async function geminiGenerate(params) {
+  let lastError;
+  for (const model of GEMINI_MODELS) {
+    try {
+      console.log(`[AI Agent] Trying model: ${model}`);
+      const result = await ai.models.generateContent({ ...params, model });
+      console.log(`[AI Agent] Success with model: ${model}`);
+      return result;
+    } catch (err) {
+      const errMsg = String(err?.message || err?.toString() || '');
+      const errStatus = err?.status || err?.httpStatusCode || err?.code;
+      console.warn(`[AI Agent] Model ${model} failed (status=${errStatus}): ${errMsg.slice(0, 200)}`);
+      lastError = err;
+      // Retry on quota exhaustion, rate limits, overload, or model not found
+      const isRetryable =
+        errStatus === 429 || errStatus === 503 || errStatus === 404 ||
+        /429|quota|rate.?limit|resource.?exhausted|overload|not.?found|unavailable/i.test(errMsg);
+      if (!isRetryable) throw err;
+      console.log(`[AI Agent] Retryable error — trying next model in fallback list...`);
+    }
+  }
+  throw lastError;
+}
 
 export async function getSessions(req, res) {
   try {
@@ -147,6 +178,7 @@ export async function generateReply(req, res) {
     );
     if (!sess.length) return res.status(404).json({ error: 'Session not found' });
 
+    // Save user message
     const { rows: insertedUserRows } = await pool.query(
       `INSERT INTO chat_messages (session_id, sender, content)
        VALUES ($1, 'user', $2)
@@ -155,69 +187,164 @@ export async function generateReply(req, res) {
     );
     const userMessage = insertedUserRows[0];
 
+    // Load last 40 messages for context
     const { rows: historyRows } = await pool.query(
-      `SELECT sender, content
-       FROM chat_messages
-       WHERE session_id = $1
-       ORDER BY created_at ASC
-       LIMIT 40`,
+      `SELECT sender, content FROM chat_messages
+       WHERE session_id = $1 ORDER BY created_at ASC LIMIT 40`,
       [req.params.id]
     );
 
     let aiText;
     try {
-      // 1. Vectorize
-      const embedResult = await ai.models.embedContent({
-        model: 'gemini-embedding-001',
-        contents: content,
-        config: { outputDimensionality: 768 },
-      });
-      const query_embedding = embedResult.embeddings[0].values;
-
-      // 2. Query Supabase
-      const { data: docs, error: rpcError } = await supabaseAdmin.rpc('match_legal_docs', {
-        query_embedding,
-        match_threshold: 0.5,
-        match_count: 3,
-      });
-
-      if (rpcError) throw new Error(`Supabase RPC Error: ${rpcError.message}`);
-
+      // ── STEP 1: RAG embedding (non-fatal — falls back if Supabase RPC missing) ──
       let contextText = '';
-      if (docs && docs.length > 0) {
-        contextText = docs.map((doc) => {
-          const articleName = doc.metadata?.article_name || 'Unknown Article';
-          const source = doc.metadata?.source || 'Unknown Source';
-          return `[Source: ${source} | Article: ${articleName}]\n${doc.content}`;
-        }).join('\n\n');
+      try {
+        console.log('[AI Agent] Step 1: Embedding user message...');
+        const embedResult = await ai.models.embedContent({
+          model: 'gemini-embedding-001',
+          contents: content,
+          config: { outputDimensionality: 768 },
+        });
+        const query_embedding = embedResult.embeddings[0].values;
+        console.log('[AI Agent] Step 2: Querying Supabase match_legal_docs...');
+        const { data: docs, error: rpcError } = await supabaseAdmin.rpc('match_legal_docs', {
+          query_embedding,
+          match_threshold: 0.5,
+          match_count: 3,
+        });
+        if (rpcError) {
+          console.warn('[AI Agent] RAG RPC error (non-fatal):', rpcError.message);
+        } else if (docs && docs.length > 0) {
+          contextText = docs.map((doc) => {
+            const articleName = doc.metadata?.article_name || 'Unknown Article';
+            const source = doc.metadata?.source || 'Unknown Source';
+            return `[Source: ${source} | Article: ${articleName}]\n${doc.content}`;
+          }).join('\n\n');
+          console.log(`[AI Agent] RAG found ${docs.length} relevant documents.`);
+        } else {
+          console.log('[AI Agent] RAG returned no documents for this query.');
+        }
+      } catch (ragErr) {
+        // RAG is optional — log and continue without context
+        console.warn('[AI Agent] RAG step failed (non-fatal), continuing without context:', ragErr.message);
       }
 
-      // 3. Inference
-      const systemInstruction = `You are the LawyerUp AI Assistant, an expert in Tunisian Law. Use the provided Arabic legal context to answer the user's question accurately.
-DETECTION: Identify the language the user is speaking (Tunisian Derja, Standard Arabic, French, or English) and respond ONLY in that exact language. If the answer isn't in the context, inform them politely in their language.
+      // ── STEP 2: Build system instruction + conversation history ──
+      const systemInstruction = `You are the LawyerUp Assistant. You have access to the app's database and can perform actions on behalf of the user.
 
-CITATION: At the end of your response, you MUST cite the article_name from the metadata provided in the context so the user knows which law is being cited.
+Lawyer Recommendations: If the user asks about lawyers, finding a lawyer, or who is the best lawyer, ALWAYS call the getLawyers tool to fetch real data. Never make up lawyer names or IDs. Only recommend lawyers found in the database.
 
-Context:
-${contextText}`;
+Messaging: If the user wants to contact or message a lawyer, FIRST you must have their valid lawyerId.
+- If you DO NOT have the lawyerId (e.g., the user only gave a name), silently call the getLawyers tool to search for the lawyer. DO NOT tell the user you need to find the ID.
+- Once you have the lawyerId and the user wants to send a message, draft a professional message and ask the user: "Here is the draft message: [message]. Should I send it?"
+- Do NOT call sendMessageToLawyer until the user explicitly confirms they want to send it.
 
-      const chatResult = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
-        contents: content,
+Important: When calling sendMessageToLawyer, you MUST use a valid lawyerId. Do NOT guess or hallucinate UUIDs.
+
+Confirmation: ONLY call sendMessageToLawyer after the user explicitly confirms (e.g., 'Yes', 'Send it', 'Go ahead').
+
+Tone: Be professional but friendly. Respond in Tunisian Derja if the user writes in Derja, in French if they write in French, otherwise English or Arabic.
+
+Legal Context (use this to answer law questions):
+${contextText || 'No specific legal articles found for this query. Answer based on general Tunisian law knowledge.'}`;
+
+      const conversationHistory = historyRows.map(row => ({
+        role: row.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: row.content }],
+      }));
+
+      // Safety: Gemini requires at least one user-role content
+      const contents = conversationHistory.length > 0
+        ? conversationHistory
+        : [{ role: 'user', parts: [{ text: content }] }];
+
+      // ── STEP 3: First call to Gemini with tools enabled ──
+      console.log('[AI Agent] Step 3: Calling Gemini for first response...');
+      const firstResult = await geminiGenerate({
+        contents,
         config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.3,
+          systemInstruction,
+          temperature: 0.4,
+          tools: [{ functionDeclarations: lawyerAppTools }],
         },
       });
 
-      aiText = chatResult.text;
+      // 5. Check for function call in response parts (@google/genai v1 JS SDK)
+      const responseParts = firstResult.candidates?.[0]?.content?.parts || [];
+      const functionCallPart = responseParts.find(p => p.functionCall);
+
+      if (functionCallPart) {
+        const call = functionCallPart.functionCall;
+        let toolResult;
+
+        console.log(`[AI Agent] Function call requested: ${call.name}`, call.args);
+
+        if (call.name === 'getLawyers') {
+          toolResult = await getLawyers(call.args.specialty, call.args.minRating, call.args.name);
+        } else if (call.name === 'sendMessageToLawyer') {
+          let lawyerId = call.args.lawyerId;
+          const messageBody = call.args.messageBody;
+
+          // Validate lawyerId — must be a UUID. If not (e.g. AI passed a name like "Gharbi"),
+          // auto-resolve it via getLawyers before attempting to send.
+          const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (!lawyerId || !UUID_REGEX.test(lawyerId)) {
+            console.log(`[AI Agent] lawyerId "${lawyerId}" is not a UUID — auto-resolving via getLawyers...`);
+            // Use the raw lawyerId as a name hint; also try the message content for clues
+            const nameHint = (!lawyerId || lawyerId === 'undefined') ? '' : lawyerId;
+            const lawyerList = await getLawyers(undefined, undefined, nameHint);
+            if (Array.isArray(lawyerList) && lawyerList.length > 0) {
+              lawyerId = lawyerList[0].id;
+              console.log(`[AI Agent] Resolved lawyerId to: ${lawyerId} (${lawyerList[0].name})`);
+            } else {
+              toolResult = { error: 'Could not find a lawyer matching that name. Please ask the user to clarify.' };
+              lawyerId = null;
+            }
+          }
+
+          if (lawyerId) {
+            toolResult = await sendMessageToLawyer(lawyerId, messageBody, req.user.id);
+          }
+        } else {
+          toolResult = { error: `Unknown function: ${call.name}` };
+        }
+
+        console.log(`[AI Agent] Tool result:`, JSON.stringify(toolResult));
+
+        // ── STEP 4: Send tool result back to Gemini ──
+        console.log('[AI Agent] Step 4: Sending tool result back to Gemini...');
+        const secondResult = await geminiGenerate({
+          contents: [
+            ...contents,
+            { role: 'model', parts: [{ functionCall: call }] },
+            { role: 'tool', parts: [{ functionResponse: { name: call.name, response: { output: toolResult } } }] },
+          ],
+          config: {
+            systemInstruction,
+            temperature: 0.4,
+            tools: [{ functionDeclarations: lawyerAppTools }],
+          },
+        });
+
+        const secondParts = secondResult.candidates?.[0]?.content?.parts || [];
+        aiText = secondParts.find(p => p.text)?.text || secondResult.text || 'Done.';
+      } else {
+        aiText = responseParts.find(p => p.text)?.text || firstResult.text || 'I was unable to generate a response.';
+      }
     } catch (aiError) {
-      console.log('AI Error:', aiError);
-      console.error('POST /chat/sessions/:id/reply ai error:', aiError);
+      console.error('[AI Agent] Error details:', {
+        message: aiError.message,
+        status: aiError.status,
+        stack: aiError.stack,
+      });
       await pool.query('DELETE FROM chat_messages WHERE id = $1', [userMessage.id]);
-      return res.status(502).json({ error: 'AI assistant unavailable right now. Please try again.' });
+      return res.status(502).json({ 
+        error: 'AI assistant unavailable right now. Please try again.',
+        detail: process.env.NODE_ENV === 'development' ? aiError.message : undefined,
+      });
     }
 
+    // 7. Save AI response and return
     const { rows: insertedAiRows } = await pool.query(
       `INSERT INTO chat_messages (session_id, sender, content)
        VALUES ($1, 'ai', $2)

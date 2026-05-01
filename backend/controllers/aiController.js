@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { supabaseAdmin } from '../config/supabase.js';
+import { lawyerAppTools, getLawyers, sendMessageToLawyer } from '../services/aiTools.js';
 
 // Initialize Gemini Client
 const ai = new GoogleGenAI({ 
@@ -43,25 +44,60 @@ export async function askRAG(req, res) {
     }
 
     // 3. Inference with Gemini 1.5 Flash
-    const systemInstruction = `You are the LawyerUp AI Assistant, an expert in Tunisian Law. Use the provided Arabic legal context to answer the user's question accurately.
-DETECTION: Identify the language the user is speaking (Tunisian Derja, Standard Arabic, French, or English) and respond ONLY in that exact language. If the answer isn't in the context, inform them politely in their language.
+    const systemInstruction = `You are the LawyerUp Assistant. You have access to the app's database.
 
-CITATION: At the end of your response, you MUST cite the article_name from the metadata provided in the context so the user knows which law is being cited.
+Lawyer Recommendations: If a user asks for a lawyer, use getLawyers. Only recommend lawyers found in the database.
+
+Messaging: If a user wants to contact a lawyer, FIRST draft a professional message and ask the user: 'Here is the draft: [message]. Should I send it?'.
+
+Confirmation: ONLY call sendMessageToLawyer if the user explicitly confirms (e.g., 'Yes', 'Send it').
+
+Tone: Be professional but helpful. Speak in Tunisian Derja if the user does.
 
 Context:
 ${contextText}`;
 
     const chatResult = await ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: 'gemini-1.5-flash',
       contents: message,
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.3,
+        tools: [{ functionDeclarations: lawyerAppTools }],
       },
     });
 
+    let finalResponseText = chatResult.text;
+
+    if (chatResult.functionCalls && chatResult.functionCalls.length > 0) {
+      const call = chatResult.functionCalls[0];
+      let apiResponse;
+
+      if (call.name === 'getLawyers') {
+        apiResponse = await getLawyers(call.args.specialty, call.args.minRating);
+      } else if (call.name === 'sendMessageToLawyer') {
+        apiResponse = await sendMessageToLawyer(call.args.lawyerId, call.args.messageBody, req.user?.id);
+      }
+
+      const secondResult = await ai.models.generateContent({
+        model: 'gemini-1.5-flash',
+        contents: [
+          { role: 'user', parts: [{ text: message }] },
+          { role: 'model', parts: [{ functionCall: call }] },
+          { role: 'user', parts: [{ functionResponse: { name: call.name, response: apiResponse } }] }
+        ],
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.3,
+          tools: [{ functionDeclarations: lawyerAppTools }]
+        },
+      });
+
+      finalResponseText = secondResult.text;
+    }
+
     res.json({
-      response: chatResult.text,
+      response: finalResponseText,
       sources: docs ? docs.map((d) => d.metadata) : [],
     });
   } catch (error) {

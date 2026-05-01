@@ -8,6 +8,7 @@
 import express from 'express';
 import { getAIResponse } from '../services/aiEngine.js';
 import { askRAG } from '../controllers/aiController.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -66,6 +67,6 @@ router.get('/health', async (_req, res) => {
  * Multilingual RAG Controller: Vectorizes the query, retrieves Supabase context,
  * and responds in the detected language using Gemini 1.5 Flash.
  */
-router.post('/ask', askRAG);
+router.post('/ask', optionalAuth, askRAG);
 
 export default router;

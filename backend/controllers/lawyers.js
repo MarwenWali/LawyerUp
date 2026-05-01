@@ -54,6 +54,7 @@ export async function getAllLawyers(req, res) {
 export async function getLawyerById(req, res) {
   try {
     const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'Invalid lawyer ID' });
 
     const result = await pool.query(
       `SELECT

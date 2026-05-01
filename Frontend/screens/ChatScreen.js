@@ -100,9 +100,15 @@ const ChatScreen = () => {
 
     try {
       await incrementPrompt();
+      const token = await AsyncStorage.getItem('lawyerup_token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(AI_SERVICE_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({ message: userMessage })
       });
 
