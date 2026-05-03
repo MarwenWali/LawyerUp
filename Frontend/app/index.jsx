@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, StatusBar, Platform, TextInput, FlatList, KeyboardAvoidingView, Modal, Alert } from 'react-native';
+import { View, Text, Pressable, StyleSheet, StatusBar, Platform, TextInput, FlatList, KeyboardAvoidingView, Modal, Alert, Keyboard } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -73,7 +73,23 @@ export default function LandingPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [guestPromptCount, setGuestPromptCount] = useState(0);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const flatListRef = useRef(null);
+
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   useEffect(() => {
     // Set initial message when component mounts or language changes
@@ -186,7 +202,6 @@ export default function LandingPage() {
 
   if (isAuthenticated) return null;
 
-  const showSuggestions = messages.length <= 2 && !isTyping && guestPromptCount < 3;
   const remainingPrompts = Math.max(0, 3 - guestPromptCount);
 
   return (
@@ -231,7 +246,7 @@ export default function LandingPage() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={0}
       >
         <FlatList
           ref={flatListRef}
@@ -246,27 +261,7 @@ export default function LandingPage() {
           ListFooterComponent={isTyping ? <TypingIndicator C={C} /> : null}
         />
 
-        {showSuggestions && (
-          <View style={styles.suggestionsContainer}>
-            <FlatList
-              data={AI_SUGGESTED_QUESTIONS.slice(0, 3)}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [styles.suggestionPill, { backgroundColor: C.card, borderColor: C.border }, pressed && { opacity: 0.7 }]}
-                  onPress={() => sendMessage(item)}
-                >
-                  <Text style={[styles.suggestionText, { color: C.tint }]}>{item}</Text>
-                </Pressable>
-              )}
-              keyExtractor={(_, i) => i.toString()}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-            />
-          </View>
-        )}
-
-        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: insets.bottom + 8 }]}>
+        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: isKeyboardVisible ? 10 : insets.bottom + 8 }]}>
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
@@ -382,9 +377,6 @@ const styles = StyleSheet.create({
   typingBubble: { paddingVertical: 16, paddingHorizontal: 20 },
   dotsRow: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  suggestionsContainer: { paddingVertical: 8 },
-  suggestionPill: { borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
-  suggestionText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
   inputBar: { borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16 },
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, gap: 8 },
   textInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 10 },

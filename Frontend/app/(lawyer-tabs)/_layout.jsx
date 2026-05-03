@@ -1,33 +1,11 @@
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { NativeTabs, Icon, Label } from "expo-router/unstable-native-tabs";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import React from "react";
 import { useTheme } from "@/constants/useTheme";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-function NativeTabLayout() {
-  const { t } = useLanguage();
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
-        <Label>{t.home}</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="inbox">
-        <Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} />
-        <Label>{t.inbox || 'Inbox'}</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }} />
-        <Label>{t.profile}</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
 
 function ClassicTabLayout() {
   const colorScheme = useColorScheme();
@@ -48,7 +26,7 @@ function ClassicTabLayout() {
         tabBarStyle: {
           position: "absolute",
           backgroundColor: isIOS ? "transparent" : C.headerBg,
-          borderTopWidth: isWeb ? 1 : 0,
+          borderTopWidth: 1,
           borderTopColor: C.border,
           elevation: 0,
           ...(isWeb ? { height: 84 } : {}),
@@ -57,17 +35,18 @@ function ClassicTabLayout() {
         tabBarBackground: () =>
           isIOS ? (
             <BlurView intensity={100} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-          ) : isWeb ? (
+          ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: C.headerBg }]} />
-          ) : null,
+          ),
       }}
     >
       <Tabs.Screen name="index" options={{ title: t.home, tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} /> }} />
       <Tabs.Screen name="cases" options={{ title: t.cases, tabBarIcon: ({ color, size }) => <Ionicons name="folder" size={size} color={color} /> }} />
-      <Tabs.Screen name="inbox" options={{ title: t.inbox || 'Inbox', tabBarIcon: ({ color, size }) => <Ionicons name="chatbubble-ellipses" size={size} color={color} /> }} />
       <Tabs.Screen name="requests" options={{ title: t.requests || 'Requests', tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} /> }} />
+      <Tabs.Screen name="inbox" options={{ title: t.inbox || 'Inbox', tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
-      {/* Hide extra screens from tab bar */}
+      
+      {/* Hide redundant files from showing up in the bottom tab bar */}
       <Tabs.Screen name="inbox-chat" options={{ href: null }} />
       <Tabs.Screen name="inbox-old-tabs" options={{ href: null }} />
       <Tabs.Screen name="inbox-unified" options={{ href: null }} />
@@ -76,6 +55,5 @@ function ClassicTabLayout() {
 }
 
 export default function LawyerTabLayout() {
-  if (isLiquidGlassAvailable()) return <NativeTabLayout />;
   return <ClassicTabLayout />;
 }

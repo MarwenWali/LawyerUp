@@ -392,3 +392,9 @@ For issues or questions:
 ---
 
 **Happy fine-tuning! 🇹🇳 بالتوفيق!**
+
+
+
+how to start RAG:
+cd ai_iss
+python ingest_vector_store.py

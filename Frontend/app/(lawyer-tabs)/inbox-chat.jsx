@@ -9,8 +9,10 @@ import {
   Text,
   TextInput,
   View,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +48,7 @@ function Receipt({ readByAll, color }) {
 
 export default function LawyerInboxChatPage() {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const C = useTheme();
   const { user } = useAuth();
   const params = useLocalSearchParams();
@@ -64,8 +67,25 @@ export default function LawyerInboxChatPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   const canSend = useMemo(() => Boolean(input.trim()) && !sending, [input, sending]);
+
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   const loadMessages = useCallback(async ({ isRefresh = false } = {}) => {
     if (!conversationId) return;
@@ -219,7 +239,11 @@ export default function LawyerInboxChatPage() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: C.background }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { backgroundColor: C.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
       <View style={[styles.header, { paddingTop: insets.top + 2, borderBottomColor: C.border, backgroundColor: C.headerBg }]}>
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={C.tint} />
@@ -229,12 +253,6 @@ export default function LawyerInboxChatPage() {
           <Text style={[styles.subtitle, { color: C.textSecondary }]}>{otherTyping ? 'Typing...' : 'Secure in-app chat'}</Text>
         </View>
       </View>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-      >
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={C.accent} />
@@ -274,7 +292,7 @@ export default function LawyerInboxChatPage() {
           />
         )}
 
-        <View style={[styles.inputBar, { borderTopColor: C.border, backgroundColor: C.headerBg, paddingBottom: insets.bottom || 10 }]}>
+        <View style={[styles.inputBar, { borderTopColor: C.border, backgroundColor: C.headerBg, paddingBottom: isKeyboardVisible ? 10 : tabBarHeight }]}>
           <TextInput
             style={[styles.input, { color: C.foreground, backgroundColor: C.background, borderColor: C.border }]}
             placeholder="Type a message"
@@ -295,8 +313,7 @@ export default function LawyerInboxChatPage() {
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -377,11 +394,12 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    borderWidth: 2,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 30,
-    fontSize: 14,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    fontSize: 15,
     fontFamily: 'Inter_400Regular',
     maxHeight: 120,
     minHeight: 44,

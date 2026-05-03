@@ -64,8 +64,11 @@ export async function getLawyers(specialty, minRating, name) {
     }
 
     if (name) {
-      params.push(`%${name}%`);
-      query += ` AND u.full_name ILIKE $${params.length}`;
+      const nameParts = name.trim().split(/\s+/);
+      for (const part of nameParts) {
+        params.push(`%${part}%`);
+        query += ` AND u.full_name ILIKE $${params.length}`;
+      }
     }
 
     query += ` ORDER BY lp.rating DESC`;

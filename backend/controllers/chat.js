@@ -9,10 +9,10 @@ const ai = new GoogleGenAI({
 });
 
 // ── Model fallback chain (confirmed available on this API key) ──────────────
-// gemini-2.5-flash-lite: fast, generous quota, confirmed working
-// gemini-2.5-flash: more powerful fallback
-// gemini-2.0-flash: last resort
-const GEMINI_MODELS = ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+// gemini-2.5-flash: powerful default
+// gemini-2.0-flash: fallback
+// gemini-2.5-flash-lite: high-quota last resort
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite-001'];
 
 async function geminiGenerate(params) {
   let lastError;
@@ -254,71 +254,19 @@ ${contextText || 'No specific legal articles found for this query. Answer based 
       }));
 
       // Safety: Gemini requires at least one user-role content
-      const contents = conversationHistory.length > 0
-        ? conversationHistory
+      let currentContents = conversationHistory.length > 0
+        ? [...conversationHistory]
         : [{ role: 'user', parts: [{ text: content }] }];
 
-      // ── STEP 3: First call to Gemini with tools enabled ──
-      console.log('[AI Agent] Step 3: Calling Gemini for first response...');
-      const firstResult = await geminiGenerate({
-        contents,
-        config: {
-          systemInstruction,
-          temperature: 0.4,
-          tools: [{ functionDeclarations: lawyerAppTools }],
-        },
-      });
+      let MAX_TURNS = 5;
+      let turnCount = 0;
+      aiText = '';
 
-      // 5. Check for function call in response parts (@google/genai v1 JS SDK)
-      const responseParts = firstResult.candidates?.[0]?.content?.parts || [];
-      const functionCallPart = responseParts.find(p => p.functionCall);
-
-      if (functionCallPart) {
-        const call = functionCallPart.functionCall;
-        let toolResult;
-
-        console.log(`[AI Agent] Function call requested: ${call.name}`, call.args);
-
-        if (call.name === 'getLawyers') {
-          toolResult = await getLawyers(call.args.specialty, call.args.minRating, call.args.name);
-        } else if (call.name === 'sendMessageToLawyer') {
-          let lawyerId = call.args.lawyerId;
-          const messageBody = call.args.messageBody;
-
-          // Validate lawyerId — must be a UUID. If not (e.g. AI passed a name like "Gharbi"),
-          // auto-resolve it via getLawyers before attempting to send.
-          const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (!lawyerId || !UUID_REGEX.test(lawyerId)) {
-            console.log(`[AI Agent] lawyerId "${lawyerId}" is not a UUID — auto-resolving via getLawyers...`);
-            // Use the raw lawyerId as a name hint; also try the message content for clues
-            const nameHint = (!lawyerId || lawyerId === 'undefined') ? '' : lawyerId;
-            const lawyerList = await getLawyers(undefined, undefined, nameHint);
-            if (Array.isArray(lawyerList) && lawyerList.length > 0) {
-              lawyerId = lawyerList[0].id;
-              console.log(`[AI Agent] Resolved lawyerId to: ${lawyerId} (${lawyerList[0].name})`);
-            } else {
-              toolResult = { error: 'Could not find a lawyer matching that name. Please ask the user to clarify.' };
-              lawyerId = null;
-            }
-          }
-
-          if (lawyerId) {
-            toolResult = await sendMessageToLawyer(lawyerId, messageBody, req.user.id);
-          }
-        } else {
-          toolResult = { error: `Unknown function: ${call.name}` };
-        }
-
-        console.log(`[AI Agent] Tool result:`, JSON.stringify(toolResult));
-
-        // ── STEP 4: Send tool result back to Gemini ──
-        console.log('[AI Agent] Step 4: Sending tool result back to Gemini...');
-        const secondResult = await geminiGenerate({
-          contents: [
-            ...contents,
-            { role: 'model', parts: [{ functionCall: call }] },
-            { role: 'tool', parts: [{ functionResponse: { name: call.name, response: { output: toolResult } } }] },
-          ],
+      while (turnCount < MAX_TURNS) {
+        turnCount++;
+        console.log(`[AI Agent] Step 3: Calling Gemini (Turn ${turnCount})...`);
+        const result = await geminiGenerate({
+          contents: currentContents,
           config: {
             systemInstruction,
             temperature: 0.4,
@@ -326,10 +274,60 @@ ${contextText || 'No specific legal articles found for this query. Answer based 
           },
         });
 
-        const secondParts = secondResult.candidates?.[0]?.content?.parts || [];
-        aiText = secondParts.find(p => p.text)?.text || secondResult.text || 'Done.';
-      } else {
-        aiText = responseParts.find(p => p.text)?.text || firstResult.text || 'I was unable to generate a response.';
+        const responseParts = result.candidates?.[0]?.content?.parts || [];
+        const functionCallPart = responseParts.find(p => p.functionCall);
+        const textPart = responseParts.find(p => p.text);
+
+        if (functionCallPart) {
+          const call = functionCallPart.functionCall;
+          let toolResult;
+
+          console.log(`[AI Agent] Function call requested: ${call.name}`, call.args);
+
+          if (call.name === 'getLawyers') {
+            toolResult = await getLawyers(call.args.specialty, call.args.minRating, call.args.name);
+          } else if (call.name === 'sendMessageToLawyer') {
+            let lawyerId = call.args.lawyerId;
+            const messageBody = call.args.messageBody;
+
+            // Validate lawyerId — must be a UUID.
+            const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!lawyerId || !UUID_REGEX.test(lawyerId)) {
+              console.log(`[AI Agent] lawyerId "${lawyerId}" is not a UUID — auto-resolving via getLawyers...`);
+              const nameHint = (!lawyerId || lawyerId === 'undefined') ? '' : lawyerId;
+              const lawyerList = await getLawyers(undefined, undefined, nameHint);
+              if (Array.isArray(lawyerList) && lawyerList.length > 0) {
+                lawyerId = lawyerList[0].id;
+                console.log(`[AI Agent] Resolved lawyerId to: ${lawyerId} (${lawyerList[0].name})`);
+              } else {
+                toolResult = { error: 'Could not find a lawyer matching that name. Please ask the user to clarify.' };
+                lawyerId = null;
+              }
+            }
+
+            if (lawyerId) {
+              toolResult = await sendMessageToLawyer(lawyerId, messageBody, req.user.id);
+            }
+          } else {
+            toolResult = { error: `Unknown function: ${call.name}` };
+          }
+
+          console.log(`[AI Agent] Tool result:`, JSON.stringify(toolResult));
+
+          // Append model's tool call AND the tool's response to contents for the next turn
+          currentContents.push({ role: 'model', parts: [{ functionCall: call }] });
+          currentContents.push({ role: 'tool', parts: [{ functionResponse: { name: call.name, response: { output: toolResult } } }] });
+          
+          // Loop continues to let Gemini generate text based on the tool result
+        } else {
+          // No function call, we have our final text response
+          aiText = textPart?.text || result.text || 'I was unable to generate a response.';
+          break;
+        }
+      }
+
+      if (!aiText && turnCount >= MAX_TURNS) {
+         aiText = "I had to stop thinking because I reached my maximum number of steps. Please try again.";
       }
     } catch (aiError) {
       console.error('[AI Agent] Error details:', {

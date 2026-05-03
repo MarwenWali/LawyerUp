@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 // Derive the backend host from the Expo dev server URI so it works on
 // physical devices, Android emulators, and iOS simulators automatically.
 const getBaseUrl = () => {
+ 
   // Tunnel / deployed URL set via EXPO_PUBLIC_API_URL (works on any network)
   const tunnelUrl = process.env.EXPO_PUBLIC_API_URL;
   if (tunnelUrl) return tunnelUrl;
