@@ -66,13 +66,14 @@ export default function LandingPage() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isLoading, logout } = useAuth();
   const C = useTheme();
-  const { t } = useLanguage();
-  const { isDark } = useThemeContext();
+  const { t, language, changeLanguage } = useLanguage();
+  const { isDark, toggleTheme } = useThemeContext();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [guestPromptCount, setGuestPromptCount] = useState(0);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const flatListRef = useRef(null);
 
@@ -217,12 +218,33 @@ export default function LandingPage() {
             </View>
             <Text style={[styles.logoText, { color: C.foreground }]}>LawyerUp</Text>
           </View>
-          <Pressable
-            style={({ pressed }) => [styles.signInBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => router.push('/(auth)/login')}
-          >
-            <Text style={[styles.signInText, { color: C.tint }]}>{t.signIn}</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {/* Language Toggle */}
+            <Pressable 
+              onPress={() => setShowLangMenu(true)} 
+              style={({ pressed }) => [{ paddingHorizontal: 8, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border }, pressed && { opacity: 0.7 }]}
+            >
+              <Ionicons name="globe-outline" size={14} color={C.foreground} style={{ marginRight: 4 }} />
+              <Text style={{ color: C.foreground, fontSize: 12, fontFamily: 'Inter_600SemiBold' }}>
+                {language === 'derja' ? 'TN' : language === 'french' ? 'FR' : 'EN'}
+              </Text>
+            </Pressable>
+
+            {/* Theme Toggle */}
+            <Pressable 
+              onPress={() => toggleTheme(isDark ? 'light' : 'dark')} 
+              style={({ pressed }) => [{ padding: 6, backgroundColor: C.card, borderRadius: 10, borderWidth: 1, borderColor: C.border }, pressed && { opacity: 0.7 }]}
+            >
+              <Ionicons name={isDark ? "sunny" : "moon"} size={16} color={C.foreground} />
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.signInBtn, { marginLeft: 2 }, pressed && { opacity: 0.7 }]}
+              onPress={() => router.push('/(auth)/login')}
+            >
+              <Text style={[styles.signInText, { color: C.tint }]}>{t.signIn}</Text>
+            </Pressable>
+          </View>
         </View>
         <View style={styles.chatHeaderInner}>
           <View style={[styles.chatHeaderAvatar, { backgroundColor: C.muted }]}>
@@ -346,11 +368,46 @@ export default function LandingPage() {
           </View>
         </View>
       </Modal>
+
+      {/* Language Dropdown Modal */}
+      <Modal visible={showLangMenu} transparent animationType="fade" onRequestClose={() => setShowLangMenu(false)}>
+        <Pressable style={styles.dropdownOverlay} onPress={() => setShowLangMenu(false)}>
+          <View style={[styles.dropdownMenu, { backgroundColor: C.card, borderColor: C.border }]}>
+            {[
+              { key: 'english', label: 'English (EN)' },
+              { key: 'derja', label: 'Derja (TN)' },
+              { key: 'french', label: 'Français (FR)' },
+            ].map((lang) => (
+              <Pressable
+                key={lang.key}
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  { borderBottomColor: C.border },
+                  language === lang.key && { backgroundColor: C.muted },
+                  pressed && { opacity: 0.7 }
+                ]}
+                onPress={() => {
+                  changeLanguage(lang.key);
+                  setShowLangMenu(false);
+                }}
+              >
+                <Text style={[styles.dropdownItemText, { color: C.foreground }]}>
+                  {lang.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', justifyContent: 'flex-start', alignItems: 'flex-end' },
+  dropdownMenu: { width: 150, marginTop: 70, marginRight: 20, borderRadius: 12, borderWidth: 1, overflow: 'hidden', elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  dropdownItem: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  dropdownItemText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   container: { flex: 1 },
   chatHeader: { paddingBottom: 12, paddingHorizontal: 20, borderBottomWidth: 1 },

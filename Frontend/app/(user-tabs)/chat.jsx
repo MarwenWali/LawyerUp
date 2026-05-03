@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, FlatList,
-  Platform, KeyboardAvoidingView, ActivityIndicator, Alert,
+  Platform, KeyboardAvoidingView, ActivityIndicator, Alert, Keyboard
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -99,7 +99,23 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const flatListRef = useRef(null);
+
+  useEffect(() => {
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const keyboardWillHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
+  }, []);
 
   // ── Session management ─────────────────────────────────────────────────
   useEffect(() => { loadSessions(); }, []);
@@ -309,7 +325,7 @@ export default function ChatPage() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
+        keyboardVerticalOffset={0}
       >
         {loadingMsgs ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -350,7 +366,7 @@ export default function ChatPage() {
           </View>
         )}
 
-        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: tabBarHeight + 8 }]}>
+        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: isKeyboardVisible ? 10 : tabBarHeight + 8 }]}>
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
