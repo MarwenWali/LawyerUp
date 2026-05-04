@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, FlatList, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView, FlatList, Platform, ActivityIndicator, Image, Linking, Modal, Dimensions, ActionSheetIOS, Alert } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +11,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/constants/useTheme';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { casesApi, notificationsApi, lawyersApi } from '@/services/api';
+import { casesApi, notificationsApi, userApi } from '@/services/api';
+import { messagingApi } from '@/services/messagingApi';
 import NotificationsModal from '@/components/NotificationsModal';
+import UploadActionSheet from '@/components/UploadActionSheet';
 
 function formatTimeAgo(dateStr, t) {
   if (!dateStr) return '';
@@ -23,14 +27,20 @@ function formatTimeAgo(dateStr, t) {
   return `${Math.floor(days / 7)}${t.wAgo}`;
 }
 
-const SPECIALIZATIONS = [
-  { key: 'Family',      icon: 'people',          labelEn: 'Family',      labelFr: 'Famille',   labelAr: 'عائلي'  },
-  { key: 'Criminal',   icon: 'shield',          labelEn: 'Criminal',    labelFr: 'Pénal',     labelAr: 'جنائي'  },
-  { key: 'Business',   icon: 'briefcase',       labelEn: 'Business',    labelFr: 'Commerce',  labelAr: 'تجاري'  },
-  { key: 'Real Estate',icon: 'home',            labelEn: 'Real Estate', labelFr: 'Immobilier',labelAr: 'عقاري'  },
-  { key: 'Labor',      icon: 'construct',       labelEn: 'Labor',       labelFr: 'Travail',   labelAr: 'شغل'    },
-  { key: 'Civil',      icon: 'document-text',   labelEn: 'Civil',       labelFr: 'Civil',     labelAr: 'مدني'   },
-];
+const { width, height } = Dimensions.get('window');
+
+function ImagePreviewModal({ uri, onClose }) {
+  return (
+    <Modal visible={Boolean(uri)} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable style={{ position: 'absolute', top: 52, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 6 }} onPress={onClose} hitSlop={16}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
+        {uri ? <Image source={{ uri }} style={{ width, height: height * 0.85 }} resizeMode="contain" /> : null}
+      </View>
+    </Modal>
+  );
+}
 
 export default function UserDashboard() {
   const { user } = useAuth();
@@ -42,9 +52,11 @@ export default function UserDashboard() {
 
   const [cases, setCases] = useState([]);
   const [loadingCases, setLoadingCases] = useState(true);
-  const [lawyers, setLawyers] = useState([]);
-  const [loadingLawyers, setLoadingLawyers] = useState(true);
-  const [selectedSpec, setSelectedSpec] = useState(null);
+  const [recentConsultations, setRecentConsultations] = useState([]);
+  const [loadingConsultations, setLoadingConsultations] = useState(true);
+  const [vaultFiles, setVaultFiles] = useState([]);
+  const [loadingVault, setLoadingVault] = useState(true);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const [notifVisible, setNotifVisible] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -64,22 +76,76 @@ export default function UserDashboard() {
     }
   }, []);
 
-  const fetchLawyers = useCallback(async () => {
+  const fetchVaultFiles = useCallback(async () => {
     try {
-      setLoadingLawyers(true);
-      const params = { available: 'true' };
-      if (selectedSpec) params.specialization = selectedSpec;
-      const data = await lawyersApi.getAll(params);
-      setLawyers(Array.isArray(data?.lawyers) ? data.lawyers.slice(0, 8) : []);
+      setLoadingVault(true);
+      const data = await userApi.getVault();
+      setVaultFiles(data.files ? data.files.slice(0, 3) : []);
     } catch (e) {
-      console.error('fetchLawyers error', e);
+      console.error('fetchVault error', e);
     } finally {
-      setLoadingLawyers(false);
+      setLoadingVault(false);
     }
-  }, [selectedSpec]);
+  }, []);
+
+  const [isUploading, setIsUploading] = useState(false);
+
+  const processUpload = async (fileObj) => {
+    try {
+      setIsUploading(true);
+      await userApi.uploadVaultFile(fileObj);
+      await fetchVaultFiles();
+    } catch (error) {
+      Alert.alert("Upload Failed", error.message || "Failed to upload file");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const [sheetVisible, setSheetVisible] = useState(false);
+
+  const handleUploadClick = () => {
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSheetVisible(true);
+  };
+
+  const handleOptionSelect = async (option) => {
+    setSheetVisible(false);
+    // give modal time to close before opening picker
+    setTimeout(async () => {
+      if (option === 'camera') {
+        const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
+        if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'camera.jpg', type: 'image/jpeg' });
+      } else if (option === 'gallery') {
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+        if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'gallery.jpg', type: 'image/jpeg' });
+      } else if (option === 'document') {
+        const result = await DocumentPicker.getDocumentAsync({});
+        if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: result.assets[0].name, type: result.assets[0].mimeType });
+      }
+    }, 300);
+  };
+
+  const fetchConsultations = useCallback(async () => {
+    try {
+      setLoadingConsultations(true);
+      const payload = await messagingApi.listConversations('lawyer_user');
+      const conversations = Array.isArray(payload?.conversations) ? payload.conversations : [];
+      const filtered = conversations.filter(conv => {
+        const role = conv.other_participant?.role || conv.other_participant_role || 'unknown';
+        return role !== 'admin';
+      });
+      setRecentConsultations(filtered.slice(0, 3));
+    } catch (e) {
+      console.error('fetchConsultations error', e);
+    } finally {
+      setLoadingConsultations(false);
+    }
+  }, []);
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
-  useEffect(() => { fetchLawyers(); }, [fetchLawyers]);
+  useEffect(() => { fetchConsultations(); }, [fetchConsultations]);
+  useEffect(() => { fetchVaultFiles(); }, [fetchVaultFiles]);
 
   const STATUS_META = {
     pending:   { icon: 'time',             label: t.caseSubmitted },
@@ -88,23 +154,28 @@ export default function UserDashboard() {
     rejected:  { icon: 'close-circle',     label: t.caseRejected  },
   };
 
-  const quickActions = [
-    { icon: 'chatbubble-ellipses', label: t.aiAssistant, color: C.accent, bg: C.accentLight, route: '/(user-tabs)/chat' },
-    { icon: 'people', label: t.findLawyer, color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: '/(user-tabs)/lawyers' },
-  ];
-
   const recentCases = [...cases]
     .sort((a, b) => new Date(b.created_at || b.createdAt) - new Date(a.created_at || a.createdAt))
     .slice(0, 3);
 
-  const getSpecLabel = (spec) => {
-    if (language === 'fr') return spec.labelFr;
-    if (language === 'ar') return spec.labelAr;
-    return spec.labelEn;
-  };
+
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
+      <UploadActionSheet 
+        visible={sheetVisible} 
+        onClose={() => setSheetVisible(false)} 
+        onOptionSelect={handleOptionSelect} 
+      />
+      {isUploading && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={{ backgroundColor: C.card, padding: 24, borderRadius: 16, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={C.tint} style={{ marginBottom: 16 }} />
+            <Text style={{ color: C.foreground, fontFamily: 'Inter_600SemiBold', fontSize: 16 }}>Uploading...</Text>
+          </View>
+        </View>
+      )}
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}
@@ -156,167 +227,136 @@ export default function UserDashboard() {
           </LinearGradient>
         </View>
 
-        {/* ── Quick Actions 2-col grid ── */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: C.foreground }]}>{t.quickActions}</Text>
-          <View style={styles.actionsGrid}>
-            {quickActions.map((a, i) => (
-              <Pressable
-                key={i}
-                style={({ pressed }) => [styles.actionCardGrid, { backgroundColor: C.card }, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
-                onPress={() => {
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(a.route);
-                }}
-              >
-                <View style={[styles.actionIconGrid, { backgroundColor: a.bg }]}>
-                  <Ionicons name={a.icon} size={26} color={a.color} />
-                </View>
-                <Text style={[styles.actionLabelGrid, { color: C.foreground }]}>{a.label}</Text>
-                <Feather name="chevron-right" size={14} color={C.mutedForeground} style={{ marginTop: 4 }} />
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.messagesCard,
-              { backgroundColor: C.card, borderColor: C.border },
-              pressed && { opacity: 0.9 },
-            ]}
-            onPress={() => router.push('/(messaging)/conversations')}
-          >
-            <View style={[styles.messagesIcon, { backgroundColor: C.accentLight }]}>
-              <Ionicons name="chatbubbles-outline" size={24} color={C.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.messagesTitle, { color: C.foreground }]}>Messages</Text>
-              <Text style={[styles.messagesSubtitle, { color: C.mutedForeground }]}>
-                Open secure chats with lawyers
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={C.mutedForeground} />
-          </Pressable>
-        </View>
 
-        {/* ── Specialization chips ── */}
-        <View style={{ marginBottom: 24 }}>
-          <Text style={[styles.sectionTitle, { color: C.foreground, paddingHorizontal: 20, marginBottom: 14 }]}>{t.browseBySpecialty}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-            <Pressable
-              style={[styles.chip, { backgroundColor: selectedSpec === null ? C.tint : C.card, borderColor: selectedSpec === null ? C.tint : C.border }]}
-              onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedSpec(null); }}
-            >
-              <Text style={[styles.chipText, { color: selectedSpec === null ? (isDark ? '#0B1120' : '#fff') : C.mutedForeground }]}>{t.allSpecializations}</Text>
-            </Pressable>
-            {SPECIALIZATIONS.map(spec => {
-              const active = selectedSpec === spec.key;
-              return (
-                <Pressable
-                  key={spec.key}
-                  style={[styles.chip, { backgroundColor: active ? C.tint : C.card, borderColor: active ? C.tint : C.border }]}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setSelectedSpec(active ? null : spec.key);
-                  }}
-                >
-                  <Ionicons name={spec.icon} size={14} color={active ? (isDark ? '#0B1120' : '#fff') : C.accent} />
-                  <Text style={[styles.chipText, { color: active ? (isDark ? '#0B1120' : '#fff') : C.foreground }]}>{getSpecLabel(spec)}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </View>
 
-        {/* ── Available lawyers strip ── */}
+        {/* ── Recent Consultations ── */}
         <View style={{ marginBottom: 28 }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
-            <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0 }]}>{t.availableNow}</Text>
-            <Pressable onPress={() => router.push('/(user-tabs)/lawyers')}>
-              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll}</Text>
+            <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0 }]}>Recent Consultations</Text>
+            <Pressable onPress={() => router.push('/(user-tabs)/inbox')}>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll || 'See All'}</Text>
             </Pressable>
           </View>
-          {loadingLawyers ? (
+          {loadingConsultations ? (
             <ActivityIndicator color={C.accent} style={{ paddingVertical: 32 }} />
-          ) : lawyers.length === 0 ? (
-            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>{t.noAvailableLawyers}</Text>
+          ) : recentConsultations.length === 0 ? (
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No active consultations yet</Text>
           ) : (
             <FlatList
               horizontal
-              data={lawyers}
+              data={recentConsultations}
               keyExtractor={item => String(item.id)}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
               renderItem={({ item }) => (
                 <Pressable
-                  style={({ pressed }) => [styles.lawyerCard, { backgroundColor: C.card }, pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] }]}
+                  style={({ pressed }) => [styles.consultationCard, { backgroundColor: C.card, borderColor: C.border }, pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] }]}
                   onPress={() => {
                     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push('/(user-tabs)/lawyers');
+                    router.push('/(user-tabs)/inbox');
                   }}
                 >
-                  <View style={[styles.lawyerAvatar, { backgroundColor: C.tint }]}>
-                    {item.profilePhotoUrl ? (
-                      <Image source={{ uri: item.profilePhotoUrl }} style={styles.lawyerAvatarImg} />
-                    ) : (
-                      <Text style={[styles.lawyerAvatarText, { color: isDark ? '#0B1120' : C.primaryForeground }]}>
-                        {item.name?.charAt(0) ?? '?'}
+                  <View style={[styles.consultationAvatar, { backgroundColor: C.accentLight }]}>
+                    <Text style={[styles.consultationAvatarText, { color: C.accent }]}>
+                      {(item.other_participant?.full_name?.[0] || '?').toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, justifyContent: 'center' }}>
+                    <Text style={[styles.consultationName, { color: C.foreground }]} numberOfLines={1}>
+                      {item.other_participant?.full_name || 'Lawyer'}
+                    </Text>
+                    <Text style={[styles.consultationPreview, { color: C.mutedForeground }]} numberOfLines={1}>
+                      {item.last_message_preview?.trim() || 'No messages yet'}
+                    </Text>
+                  </View>
+                  {Number(item.unread_count || 0) > 0 && (
+                    <View style={[styles.consultationBadge, { backgroundColor: C.tint }]}>
+                      <Text style={[styles.consultationBadgeText, { color: C.primaryForeground }]}>
+                        {Number(item.unread_count) > 9 ? '9+' : item.unread_count}
                       </Text>
-                    )}
-                  </View>
-                  <Text style={[styles.lawyerName, { color: C.foreground }]} numberOfLines={1}>{item.name}</Text>
-                  <Text style={[styles.lawyerSpec, { color: C.mutedForeground }]} numberOfLines={1}>{item.specialization || '—'}</Text>
-                  <View style={styles.lawyerMeta}>
-                    <Ionicons name="star" size={12} color={C.accent} />
-                    <Text style={[styles.lawyerRating, { color: C.accent }]}>{Number(item.rating || 0).toFixed(1)}</Text>
-                  </View>
-                  <View style={[styles.availablePill, { backgroundColor: 'rgba(22,163,74,0.12)' }]}>
-                    <View style={styles.availableDot} />
-                    <Text style={[styles.availableTxt, { color: C.success }]}>{t.available}</Text>
-                  </View>
+                    </View>
+                  )}
                 </Pressable>
               )}
             />
           )}
         </View>
 
-        {/* ── Recent Activity ── */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: C.foreground }]}>{t.recentActivity}</Text>
-          <View style={[styles.activityCard, { backgroundColor: C.card }]}>
-            {loadingCases ? (
-              <ActivityIndicator color={C.accent} style={{ padding: 24 }} />
-            ) : recentCases.length === 0 ? (
-              <Text style={[styles.emptyText, { color: C.mutedForeground }]}>{t.noActivityYet}</Text>
-            ) : recentCases.map((item, i) => {
-              const meta = STATUS_META[item.status] || STATUS_META.pending;
-              return (
-                <View
-                  key={item.id || i}
-                  style={[styles.activityRow, i < recentCases.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                >
-                  <Ionicons
-                    name={meta.icon}
-                    size={20}
-                    color={item.status === 'pending' ? C.warning : item.status === 'rejected' ? C.destructive : C.success}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.activityText, { color: C.foreground }]}>
-                      {item.subject || item.title || t.legalCase}
-                    </Text>
-                    <Text style={[styles.activityTime, { color: C.mutedForeground }]}>
-                      {meta.label} · {formatTimeAgo(item.created_at || item.createdAt, t)}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
+        {/* ── My Legal Vault ── */}
+        <View style={{ marginBottom: 24 }}>
+          <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Legal Vault</Text>
+              <Pressable onPress={handleUploadClick} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
+                <Ionicons name="add" size={20} color={C.accent} />
+              </Pressable>
+            </View>
+            <Pressable onPress={() => router.push('/(user-tabs)/vault')}>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
+            </Pressable>
           </View>
+          {loadingVault ? (
+            <ActivityIndicator color={C.accent} style={{ paddingVertical: 20 }} />
+          ) : vaultFiles.length === 0 ? (
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No files uploaded yet</Text>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
+              {vaultFiles.map(file => {
+                const isImage = file.message_type === 'image';
+                const dateStr = new Date(file.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                
+                let statusText = 'Not shared yet';
+                let StatusIcon = null;
+                if (file.source === 'lawyer' && file.receiver_name) {
+                  statusText = `Sent to: ${file.receiver_name}`;
+                  StatusIcon = <Ionicons name="paper-plane" size={10} color="#9BA1A6" style={{ marginRight: 4 }} />;
+                } else if (file.source === 'ai') {
+                  statusText = 'Analyzed by AI';
+                }
+
+                return (
+                  <Pressable
+                    key={file.id}
+                    style={({ pressed }) => [styles.vaultCard, { backgroundColor: C.card, borderColor: C.border }, pressed && { opacity: 0.85 }]}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      if (isImage) {
+                        setPreviewImageUrl(file.attachment_url);
+                      } else {
+                        Linking.openURL(file.attachment_url).catch(() => {});
+                      }
+                    }}
+                  >
+                    <View style={[styles.vaultIconContainer, { backgroundColor: isImage ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.1)' }]}>
+                      <Ionicons name={isImage ? "image" : "document-text"} size={22} color={isImage ? "#3B82F6" : "#EF4444"} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.vaultFileName, { color: C.foreground }]} numberOfLines={1}>{file.attachment_name || 'Document'}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        {StatusIcon}
+                        <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: '#9BA1A6' }} numberOfLines={1}>
+                          {statusText}
+                        </Text>
+                      </View>
+                      <Text style={[styles.vaultFileDate, { color: C.mutedForeground }]}>{dateStr}</Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          )}
         </View>
+
+
       </ScrollView>
       <NotificationsModal
         visible={notifVisible}
         onClose={() => setNotifVisible(false)}
         onUnreadCountChange={setUnreadCount}
+      />
+      <ImagePreviewModal
+        uri={previewImageUrl}
+        onClose={() => setPreviewImageUrl(null)}
       />
     </View>
   );
@@ -342,34 +382,18 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', marginBottom: 14 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  // 2-col actions grid
-  actionsGrid: { flexDirection: 'row', gap: 12 },
-  actionCardGrid: { flex: 1, borderRadius: 16, padding: 18, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, alignItems: 'flex-start', gap: 10 },
-  actionIconGrid: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  actionLabelGrid: { fontSize: 14, fontFamily: 'Inter_600SemiBold' },
-  messagesCard: { marginTop: 12, borderRadius: 16, padding: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  messagesIcon: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  messagesTitle: { fontSize: 15, fontFamily: 'Inter_700Bold' },
-  messagesSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  // Chips
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1 },
-  chipText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
-  // Lawyer cards
-  lawyerCard: { width: 140, borderRadius: 16, padding: 14, alignItems: 'center', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6 },
-  lawyerAvatar: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 10, overflow: 'hidden' },
-  lawyerAvatarImg: { width: 56, height: 56, borderRadius: 28 },
-  lawyerAvatarText: { fontSize: 22, fontFamily: 'Inter_700Bold' },
-  lawyerName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', textAlign: 'center', marginBottom: 2 },
-  lawyerSpec: { fontSize: 11, fontFamily: 'Inter_400Regular', textAlign: 'center', marginBottom: 8 },
-  lawyerMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 8 },
-  lawyerRating: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
-  availablePill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 10 },
-  availableDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#16A34A' },
-  availableTxt: { fontSize: 11, fontFamily: 'Inter_500Medium' },
-  // Activity
-  activityCard: { borderRadius: 14, overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
-  activityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
-  activityText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
-  activityTime: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  // Consultation cards
+  consultationCard: { width: 220, flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, borderWidth: 1, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, gap: 12 },
+  consultationAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  consultationAvatarText: { fontSize: 18, fontFamily: 'Inter_700Bold' },
+  consultationName: { fontSize: 14, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  consultationPreview: { fontSize: 12, fontFamily: 'Inter_400Regular' },
+  consultationBadge: { position: 'absolute', right: 12, top: 12, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+  consultationBadgeText: { fontSize: 10, fontFamily: 'Inter_700Bold' },
+  // Vault cards
+  vaultCard: { width: 160, padding: 14, borderRadius: 16, borderWidth: 1, gap: 10, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 4 },
+  vaultIconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  vaultFileName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  vaultFileDate: { fontSize: 11, fontFamily: 'Inter_400Regular' },
   emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', padding: 24 },
 });

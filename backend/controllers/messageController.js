@@ -190,12 +190,12 @@ export async function createConversationMessage({
     attachment_type: row.attachment_type || null,
     sender: sender
       ? {
-          id: sender.id,
-          name: sender.full_name,
-          full_name: sender.full_name,
-          role: normalizeRoleLabel(sender.role),
-          profile_photo_url: sender.profile_photo_url || null,
-        }
+        id: sender.id,
+        name: sender.full_name,
+        full_name: sender.full_name,
+        role: normalizeRoleLabel(sender.role),
+        profile_photo_url: sender.profile_photo_url || null,
+      }
       : null,
   };
 

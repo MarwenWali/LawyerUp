@@ -45,6 +45,7 @@ function ClassicTabLayout() {
       <Tabs.Screen name="lawyers" options={{ title: t.lawyers, tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} /> }} />
       <Tabs.Screen name="inbox" options={{ title: "Inbox", tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
+      <Tabs.Screen name="vault" options={{ href: null, headerShown: true, title: "My Legal Vault" }} />
     </Tabs>
   );
 }

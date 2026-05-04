@@ -108,8 +108,8 @@ function buildConversationQuery(whereClause) {
       last_message.content AS last_message_content,
       last_message.created_at AS last_message_created_at,
       CASE
-        WHEN last_message.message_type = 'image' THEN COALESCE('🖼 ' || last_message.attachment_name, '🖼 Image')
-        WHEN last_message.message_type = 'file'  THEN COALESCE('📎 ' || last_message.attachment_name, '📎 Attachment')
+        WHEN last_message.message_type = 'image' THEN '📷 Photo'
+        WHEN last_message.message_type = 'file'  THEN '📄 Document'
         WHEN last_message.content IS NULL THEN ''
         WHEN char_length(last_message.content) > 120 THEN left(last_message.content, 120) || '...'
         ELSE last_message.content
