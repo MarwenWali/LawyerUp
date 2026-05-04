@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, ScrollView, FlatList, Platform, Acti
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -15,6 +15,7 @@ import { casesApi, notificationsApi, userApi } from '@/services/api';
 import { messagingApi } from '@/services/messagingApi';
 import NotificationsModal from '@/components/NotificationsModal';
 import UploadActionSheet from '@/components/UploadActionSheet';
+import CreateAppointmentModal from '@/components/CreateAppointmentModal';
 
 function formatTimeAgo(dateStr, t) {
   if (!dateStr) return '';
@@ -52,8 +53,9 @@ export default function UserDashboard() {
 
   const [cases, setCases] = useState([]);
   const [loadingCases, setLoadingCases] = useState(true);
-  const [recentConsultations, setRecentConsultations] = useState([]);
-  const [loadingConsultations, setLoadingConsultations] = useState(true);
+  const [appointments, setAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [vaultFiles, setVaultFiles] = useState([]);
   const [loadingVault, setLoadingVault] = useState(true);
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
@@ -126,25 +128,24 @@ export default function UserDashboard() {
     }, 300);
   };
 
-  const fetchConsultations = useCallback(async () => {
+  const fetchAppointments = useCallback(async () => {
     try {
-      setLoadingConsultations(true);
-      const payload = await messagingApi.listConversations('lawyer_user');
-      const conversations = Array.isArray(payload?.conversations) ? payload.conversations : [];
-      const filtered = conversations.filter(conv => {
-        const role = conv.other_participant?.role || conv.other_participant_role || 'unknown';
-        return role !== 'admin';
-      });
-      setRecentConsultations(filtered.slice(0, 3));
+      setLoadingAppointments(true);
+      const data = await userApi.getAppointments();
+      setAppointments(data.appointments ? data.appointments.slice(0, 2) : []);
     } catch (e) {
-      console.error('fetchConsultations error', e);
+      console.error('fetchAppointments error', e);
     } finally {
-      setLoadingConsultations(false);
+      setLoadingAppointments(false);
     }
   }, []);
 
   useEffect(() => { fetchCases(); }, [fetchCases]);
-  useEffect(() => { fetchConsultations(); }, [fetchConsultations]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchAppointments();
+    }, [fetchAppointments])
+  );
   useEffect(() => { fetchVaultFiles(); }, [fetchVaultFiles]);
 
   const STATUS_META = {
@@ -162,6 +163,11 @@ export default function UserDashboard() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
+      <CreateAppointmentModal 
+        visible={appointmentModalVisible} 
+        onClose={() => setAppointmentModalVisible(false)} 
+        onSuccess={fetchAppointments} 
+      />
       <UploadActionSheet 
         visible={sheetVisible} 
         onClose={() => setSheetVisible(false)} 
@@ -229,55 +235,57 @@ export default function UserDashboard() {
 
 
 
-        {/* ── Recent Consultations ── */}
+        {/* ── My Appointments ── */}
         <View style={{ marginBottom: 28 }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
-            <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0 }]}>Recent Consultations</Text>
-            <Pressable onPress={() => router.push('/(user-tabs)/inbox')}>
-              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll || 'See All'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Appointments</Text>
+              <Pressable onPress={() => setAppointmentModalVisible(true)} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
+                <Ionicons name="add" size={20} color={C.accent} />
+              </Pressable>
+            </View>
+            <Pressable onPress={() => router.push('/(user-tabs)/appointments')}>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
             </Pressable>
           </View>
-          {loadingConsultations ? (
+          {loadingAppointments ? (
             <ActivityIndicator color={C.accent} style={{ paddingVertical: 32 }} />
-          ) : recentConsultations.length === 0 ? (
-            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No active consultations yet</Text>
+          ) : appointments.length === 0 ? (
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No upcoming appointments</Text>
           ) : (
             <FlatList
               horizontal
-              data={recentConsultations}
+              data={appointments}
               keyExtractor={item => String(item.id)}
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={({ pressed }) => [styles.consultationCard, { backgroundColor: C.card, borderColor: C.border }, pressed && { opacity: 0.88, transform: [{ scale: 0.97 }] }]}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    router.push('/(user-tabs)/inbox');
-                  }}
-                >
-                  <View style={[styles.consultationAvatar, { backgroundColor: C.accentLight }]}>
-                    <Text style={[styles.consultationAvatarText, { color: C.accent }]}>
-                      {(item.other_participant?.full_name?.[0] || '?').toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, justifyContent: 'center' }}>
-                    <Text style={[styles.consultationName, { color: C.foreground }]} numberOfLines={1}>
-                      {item.other_participant?.full_name || 'Lawyer'}
-                    </Text>
-                    <Text style={[styles.consultationPreview, { color: C.mutedForeground }]} numberOfLines={1}>
-                      {item.last_message_preview?.trim() || 'No messages yet'}
-                    </Text>
-                  </View>
-                  {Number(item.unread_count || 0) > 0 && (
-                    <View style={[styles.consultationBadge, { backgroundColor: C.tint }]}>
-                      <Text style={[styles.consultationBadgeText, { color: C.primaryForeground }]}>
-                        {Number(item.unread_count) > 9 ? '9+' : item.unread_count}
-                      </Text>
+              renderItem={({ item }) => {
+                const dateObj = new Date(item.date);
+                const isLawyer = item.type === 'lawyer';
+                const isCourt = item.type === 'court';
+                return (
+                  <Pressable
+                    style={({ pressed }) => [{ width: 260, padding: 16, borderRadius: 16 }, { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 }, pressed && { opacity: 0.88 }]}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: isLawyer ? 'rgba(59,130,246,0.1)' : isCourt ? 'rgba(184, 135, 47, 0.1)' : 'rgba(16,185,129,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                        <Ionicons name={isLawyer ? 'briefcase' : isCourt ? 'business' : 'calendar'} size={20} color={isLawyer ? '#3B82F6' : isCourt ? '#B8872F' : '#10B981'} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: C.foreground }} numberOfLines={1}>{item.title}</Text>
+                        <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.mutedForeground }}>{isLawyer && item.lawyer_name ? item.lawyer_name : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}</Text>
+                      </View>
                     </View>
-                  )}
-                </Pressable>
-              )}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', padding: 8, borderRadius: 8 }}>
+                      <Ionicons name="time-outline" size={16} color={C.mutedForeground} style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, fontFamily: 'Inter_500Medium', color: C.foreground }}>{dateObj.toLocaleDateString()} at {dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
+                    </View>
+                  </Pressable>
+                );
+              }}
             />
           )}
         </View>

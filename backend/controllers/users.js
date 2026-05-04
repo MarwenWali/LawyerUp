@@ -370,3 +370,35 @@ export async function uploadVaultFile(req, res) {
     res.status(500).json({ error: 'Failed to upload vault file' });
   }
 }
+export async function getAppointments(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT a.*, u.full_name AS lawyer_name 
+       FROM appointments a
+       LEFT JOIN users u ON a.lawyer_id = u.id
+       WHERE a.user_id = $1
+       ORDER BY a.date ASC`,
+      [req.user.id]
+    );
+    res.json({ appointments: result.rows });
+  } catch (error) {
+    console.error('getAppointments error:', error);
+    res.status(500).json({ error: 'Failed to fetch appointments' });
+  }
+}
+
+export async function createAppointment(req, res) {
+  try {
+    const { title, type, date, location, lawyer_id } = req.body;
+    const result = await pool.query(
+      `INSERT INTO appointments (user_id, title, type, date, location, lawyer_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [req.user.id, title, type, date, location || null, lawyer_id || null]
+    );
+    res.status(201).json({ appointment: result.rows[0] });
+  } catch (error) {
+    console.error('createAppointment error:', error);
+    res.status(500).json({ error: 'Failed to create appointment' });
+  }
+}

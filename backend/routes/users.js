@@ -3,7 +3,7 @@ import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 import {
   getMe, updateMe, changePassword, uploadPhoto,
-  getAllUsers, getUserById, updateUser, deleteUser, getFirstAdmin, getVaultFiles, uploadVaultFile
+  getAllUsers, getUserById, updateUser, deleteUser, getFirstAdmin, getVaultFiles, uploadVaultFile, getAppointments, createAppointment
 } from '../controllers/users.js';
 
 const router = express.Router();
@@ -22,6 +22,8 @@ const uploadMessage = multer({
 });
 
 router.post('/vault',       authenticateToken, uploadMessage.single('attachment'), uploadVaultFile);
+router.get('/appointments', authenticateToken, getAppointments);
+router.post('/appointments', authenticateToken, createAppointment);
 router.get('/',             authenticateToken, requireRole('admin'),  getAllUsers);
 router.get('/:id',          authenticateToken, requireRole('admin'),  getUserById);
 router.put('/:id',          authenticateToken, requireRole('admin'),  updateUser);

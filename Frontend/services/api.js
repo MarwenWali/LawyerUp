@@ -134,6 +134,8 @@ export const userApi = {
     });
     return api.upload('/api/users/vault', formData);
   },
+  getAppointments: () => api.get('/api/users/appointments'),
+  createAppointment: (data) => api.post('/api/users/appointments', data),
 };
 
 // ── Notifications ─────────────────────────────────────────────────────────────
