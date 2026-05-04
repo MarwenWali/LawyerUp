@@ -98,7 +98,11 @@ export function useMessages(conversationId) {
     
     // State guard: prevent updating if messages are identical
     const currentMessages = messagesByConversation[conversationId] || [];
+    const lastCurrent = currentMessages[currentMessages.length - 1];
+    const lastNext    = nextMessages[nextMessages.length - 1];
+
     const messagesAreIdentical = currentMessages.length === nextMessages.length &&
+      lastCurrent?.id === lastNext?.id &&
       currentMessages.every((msg, index) => msg.id === nextMessages[index]?.id);
     
     if (!messagesAreIdentical) {

@@ -1,5 +1,66 @@
 import pool from '../config/database.js';
+import path from 'path';
+import { supabaseAdmin, isSupabaseAdminConfigured } from '../config/supabase.js';
 import { buildConversationShape, fetchConversationRow, normalizeRoleLabel } from './conversationController.js';
+
+// ── Supabase Storage bucket name ─────────────────────────────────────────────
+const BUCKET = 'chat-attachments';
+
+/**
+ * Ensure the Supabase Storage bucket exists (called lazily on first upload).
+ * Uses upsert semantics — safe to call multiple times.
+ */
+let bucketEnsured = false;
+async function ensureBucket() {
+  if (bucketEnsured || !isSupabaseAdminConfigured) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(BUCKET, {
+      public: true,
+      allowedMimeTypes: [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
+        'application/pdf', 'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain',
+      ],
+      fileSizeLimit: 10485760, // 10 MB
+    });
+    // 'already exists' is not an error — just continue
+    if (error && !error.message?.includes('already exists')) {
+      console.warn('[Storage] Could not create bucket:', error.message);
+    } else {
+      bucketEnsured = true;
+    }
+  } catch (e) {
+    console.warn('[Storage] ensureBucket error:', e.message);
+  }
+}
+
+/**
+ * Upload a file buffer to Supabase Storage and return the permanent public URL.
+ * Falls back to null if Supabase is not configured (will cause 400 — no attachment).
+ */
+async function uploadToSupabase(buffer, originalname, mimetype) {
+  await ensureBucket();
+  const ext = path.extname(originalname) || '';
+  const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  const storagePath = `messages/${unique}${ext}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from(BUCKET)
+    .upload(storagePath, buffer, {
+      contentType: mimetype,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw new Error(`Supabase upload failed: ${uploadError.message}`);
+  }
+
+  const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath);
+  return data.publicUrl;  // permanent public Supabase CDN URL
+}
 
 function sanitizeMessageContent(content) {
   if (typeof content !== 'string') return '';
@@ -21,6 +82,11 @@ function buildMessageShape(row, currentUserId) {
     content: row.content,
     is_read: row.is_read,
     created_at: row.created_at,
+    // Attachment fields
+    message_type: row.message_type || 'text',
+    attachment_url: row.attachment_url || null,
+    attachment_name: row.attachment_name || null,
+    attachment_type: row.attachment_type || null,
     sender: {
       id: row.sender_id,
       name: row.sender_name,
@@ -47,6 +113,10 @@ export async function createConversationMessage({
   content,
   clientMessageId = null,
   io = null,
+  // Attachment fields (optional)
+  attachmentUrl = null,
+  attachmentName = null,
+  attachmentType = null,
 }) {
   const conversation = await ensureConversationAccess(conversationId, senderId);
   if (!conversation) {
@@ -56,8 +126,11 @@ export async function createConversationMessage({
   }
 
   const sanitizedContent = sanitizeMessageContent(content);
-  if (!sanitizedContent) {
-    const error = new Error('Message content is required');
+  const hasAttachment = Boolean(attachmentUrl);
+
+  // Require either text content or an attachment
+  if (!sanitizedContent && !hasAttachment) {
+    const error = new Error('Message content or attachment is required');
     error.status = 400;
     throw error;
   }
@@ -68,11 +141,23 @@ export async function createConversationMessage({
     throw error;
   }
 
+  const messageType = hasAttachment
+    ? (attachmentType && attachmentType.startsWith('image/') ? 'image' : 'file')
+    : 'text';
+
   const insertResult = await pool.query(
-    `INSERT INTO messages (conversation_id, sender_id, content, is_read)
-     VALUES ($1, $2, $3, FALSE)
-     RETURNING id, conversation_id, sender_id, content, is_read, created_at`,
-    [conversation.id, senderId, sanitizedContent]
+    `INSERT INTO messages (conversation_id, sender_id, content, is_read, message_type, attachment_url, attachment_name, attachment_type)
+     VALUES ($1, $2, $3, FALSE, $4, $5, $6, $7)
+     RETURNING id, conversation_id, sender_id, content, is_read, created_at, message_type, attachment_url, attachment_name, attachment_type`,
+    [
+      conversation.id,
+      senderId,
+      sanitizedContent || '',
+      messageType,
+      attachmentUrl,
+      attachmentName,
+      attachmentType,
+    ]
   );
 
   await pool.query(
@@ -98,6 +183,11 @@ export async function createConversationMessage({
     is_read: row.is_read,
     created_at: row.created_at,
     client_message_id: clientMessageId,
+    // Attachment fields
+    message_type: row.message_type || 'text',
+    attachment_url: row.attachment_url || null,
+    attachment_name: row.attachment_name || null,
+    attachment_type: row.attachment_type || null,
     sender: sender
       ? {
           id: sender.id,
@@ -136,7 +226,7 @@ export async function createConversationMessage({
           last_message_sender_id: row.sender_id,
           last_message_content: row.content,
           last_message_created_at: row.created_at,
-          last_message_preview: row.content,
+          last_message_preview: row.content || (hasAttachment ? '📎 Attachment' : ''),
         }
       ),
     };
@@ -175,6 +265,10 @@ export async function getConversationMessages(req, res) {
            m.content,
            m.is_read,
            m.created_at,
+           m.message_type,
+           m.attachment_url,
+           m.attachment_name,
+           m.attachment_type,
            u.full_name AS sender_name,
            u.role AS sender_role,
            u.profile_photo_url AS sender_photo
@@ -217,12 +311,32 @@ export async function sendConversationMessage(req, res) {
     }
 
     const io = req.app.get('io');
+
+    // Handle file attachment if present
+    let attachmentUrl = null;
+    let attachmentName = null;
+    let attachmentType = null;
+
+    if (req.file) {
+      // Upload to Supabase Storage → permanent public URL (no localhost dependency)
+      attachmentUrl = await uploadToSupabase(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype
+      );
+      attachmentName = req.file.originalname;
+      attachmentType = req.file.mimetype;
+    }
+
     const message = await createConversationMessage({
       conversationId: req.params.id,
       senderId: req.user.id,
-      content: req.body?.content,
+      content: req.body?.content || '',
       clientMessageId: req.body?.clientMessageId || req.body?.client_message_id || null,
       io,
+      attachmentUrl,
+      attachmentName,
+      attachmentType,
     });
 
     return res.status(201).json({ message });

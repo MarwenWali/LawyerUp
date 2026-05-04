@@ -7,8 +7,13 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Dimensions,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -19,12 +24,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTheme } from '@/constants/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMessages } from '@/src/hooks/useMessages';
 import { useSocket } from '@/src/hooks/useSocket';
 import { MessageBubble } from '@/src/components/MessageBubble';
 import { TypingIndicator } from '@/src/components/TypingIndicator';
+import { messagingApi } from '@/services/messagingApi';
 
 function formatDateLabel(value) {
   const date = new Date(value);
@@ -34,6 +42,51 @@ function formatDateLabel(value) {
     day: 'numeric',
   });
 }
+
+/** Full-screen image preview modal */
+function ImagePreviewModal({ uri, onClose }) {
+  const { width, height } = Dimensions.get('window');
+  return (
+    <Modal
+      visible={Boolean(uri)}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={modalStyles.overlay}>
+        <Pressable style={modalStyles.closeBtn} onPress={onClose} hitSlop={16}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
+        {uri ? (
+          <Image
+            source={{ uri }}
+            style={{ width, height: height * 0.85 }}
+            resizeMode="contain"
+          />
+        ) : null}
+      </View>
+    </Modal>
+  );
+}
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    padding: 6,
+  },
+});
 
 function buildGroupedItems(messages) {
   const items = [];
@@ -72,6 +125,9 @@ export function ChatScreen() {
   const listRef = useRef(null);
   const typingStopTimerRef = useRef(null);
   const [draft, setDraft] = useState('');
+  const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [uploadingSending, setUploadingSending] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null); // image viewer
 
   const {
     conversation,
@@ -89,14 +145,11 @@ export function ChatScreen() {
 
   const { connectionStatus } = useSocket();
 
-  // Validate conversation type to prevent cross-contamination
   const participant = conversation?.other_participant || conversation?.citizen || conversation?.lawyer || {};
   const participantRole = participant?.role || conversation?.other_participant_role || 'unknown';
-  
-  // Debug logging to track conversation types (reduced frequency)
+
   useEffect(() => {
     if (conversationId && participant) {
-      // Only log on conversation change, not on every render
       console.log(`ChatScreen - Conversation ${conversationId}:`, {
         participantName: participant.name || participant.full_name,
         participantRole,
@@ -104,8 +157,7 @@ export function ChatScreen() {
         isAdminChat,
         currentUserRole: user?.role,
       });
-      
-      // Warn if there's a mismatch between expected and actual conversation type
+
       if (isUserChat && participantRole === 'admin') {
         console.error('Conversation type mismatch: Expected user chat but got admin conversation');
       }
@@ -113,7 +165,7 @@ export function ChatScreen() {
         console.error('Conversation type mismatch: Expected admin chat but got non-admin conversation');
       }
     }
-  }, [conversationId]); // Only depend on conversationId to prevent infinite loops
+  }, [conversationId]);
 
   const groupedItems = useMemo(() => buildGroupedItems(messages), [messages]);
   const title = participant.name || titleParam;
@@ -141,6 +193,60 @@ export function ChatScreen() {
     };
   }, []);
 
+  // ── Attachment pickers ─────────────────────────────────────────────────────
+  const pickImage = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission required', 'Please allow access to your photos to send images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        const asset = result.assets[0];
+        setPendingAttachment({
+          uri: asset.uri,
+          name: asset.fileName || asset.uri.split('/').pop() || 'photo.jpg',
+          type: asset.mimeType || 'image/jpeg',
+          conversationId,
+        });
+      }
+    } catch (e) {
+      console.error('pickImage error:', e);
+    }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/plain',
+        ],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        const asset = result.assets[0];
+        setPendingAttachment({
+          uri: asset.uri,
+          name: asset.name,
+          type: asset.mimeType || 'application/pdf',
+          conversationId,
+        });
+      }
+    } catch (e) {
+      console.error('pickDocument error:', e);
+    }
+  };
+
   const handleChangeText = useCallback((value) => {
     setDraft(value);
     sendTyping(Boolean(value.trim()));
@@ -156,18 +262,55 @@ export function ChatScreen() {
 
   const handleSend = useCallback(async () => {
     const content = draft.trim();
-    if (!content || sending) return;
+    const hasAttachment = Boolean(pendingAttachment);
 
-    setDraft('');
+    if ((!content && !hasAttachment) || sending || uploadingSending) return;
+
     sendTyping(false);
+    setDraft('');
+
+    // Guard: attachment must belong to this conversation
+    if (hasAttachment && pendingAttachment.conversationId !== conversationId) {
+      Alert.alert('Error', 'Attachment belongs to a different conversation.');
+      setPendingAttachment(null);
+      return;
+    }
+
+    const attachmentToSend = pendingAttachment;
+    setPendingAttachment(null);
 
     try {
-      await sendMessage(content);
+      if (attachmentToSend) {
+        setUploadingSending(true);
+        await messagingApi.sendMessageWithAttachment({
+          conversationId,
+          content,
+          attachment: attachmentToSend,
+        });
+        await refreshMessages();
+      } else {
+        await sendMessage(content);
+      }
       scrollToBottom(true);
-    } catch {
-      setDraft(content);
+    } catch (err) {
+      console.error('Send error:', err);
+      if (!attachmentToSend) setDraft(content);
+      else setPendingAttachment(attachmentToSend);
+      Alert.alert('Failed to send', err?.message || 'Please try again.');
+    } finally {
+      setUploadingSending(false);
     }
-  }, [draft, scrollToBottom, sendMessage, sendTyping, sending]);
+  }, [
+    conversationId,
+    draft,
+    pendingAttachment,
+    refreshMessages,
+    scrollToBottom,
+    sendMessage,
+    sendTyping,
+    sending,
+    uploadingSending,
+  ]);
 
   const renderItem = useCallback(({ item }) => {
     if (item.type === 'date') {
@@ -185,9 +328,13 @@ export function ChatScreen() {
         message={item.message}
         isOwn={item.message.sender_id === user?.id}
         theme={C}
+        onImagePress={setPreviewImageUrl}
       />
     );
-  }, [C, user?.id]);
+  }, [C, user?.id, setPreviewImageUrl]);
+
+  const isSendingAny = sending || uploadingSending;
+  const canSend = (Boolean(draft.trim()) || Boolean(pendingAttachment)) && !isSendingAny;
 
   if (!conversationId) {
     return (
@@ -201,7 +348,9 @@ export function ChatScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: C.background }]}>
+    <>
+      <ImagePreviewModal uri={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
+      <View style={[styles.container, { backgroundColor: C.background }]}>
       <View style={[styles.header, { backgroundColor: C.headerBg, borderBottomColor: C.border, paddingTop: insets.top + 10 }]}>
         <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.card }]}>
           <Ionicons name="arrow-back" size={22} color={C.foreground} />
@@ -264,7 +413,40 @@ export function ChatScreen() {
           />
         )}
 
+        {/* ── Pending attachment preview ── */}
+        {pendingAttachment ? (
+          <View style={[styles.attachmentPreview, { backgroundColor: C.muted }]}>
+            <Ionicons
+              name={pendingAttachment.type?.startsWith('image/') ? 'image' : 'document-text'}
+              size={20}
+              color={C.tint}
+            />
+            <Text style={[styles.attachmentPreviewName, { color: C.foreground }]} numberOfLines={1}>
+              {pendingAttachment.name || 'Attachment'}
+            </Text>
+            <Pressable onPress={() => setPendingAttachment(null)}>
+              <Ionicons name="close-circle" size={20} color={C.destructive || '#EF4444'} />
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
+          {/* ── Attachment buttons ── */}
+          <Pressable
+            onPress={pickImage}
+            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="image-outline" size={24} color={C.tint} />
+          </Pressable>
+          <Pressable
+            onPress={pickDocument}
+            style={({ pressed }) => [styles.attachBtn, pressed && { opacity: 0.6 }]}
+            hitSlop={8}
+          >
+            <Ionicons name="document-attach-outline" size={24} color={C.tint} />
+          </Pressable>
+
           <View style={[styles.inputWrap, { backgroundColor: C.background, borderColor: C.border }]}>
             <TextInput
               value={draft}
@@ -273,19 +455,20 @@ export function ChatScreen() {
               placeholderTextColor={C.mutedForeground}
               style={[styles.input, { color: C.foreground }]}
               multiline
+              editable={!isSendingAny}
             />
           </View>
           <Pressable
             onPress={handleSend}
-            disabled={!draft.trim() || sending}
+            disabled={!canSend}
             style={({ pressed }) => [
               styles.sendBtn,
               { backgroundColor: C.tint },
-              (!draft.trim() || sending) && { opacity: 0.45 },
-              pressed && draft.trim() && !sending && { opacity: 0.9 },
+              !canSend && { opacity: 0.45 },
+              pressed && canSend && { opacity: 0.9 },
             ]}
           >
-            {sending ? (
+            {isSendingAny ? (
               <ActivityIndicator color={C.primaryForeground} />
             ) : (
               <Ionicons name="send" size={18} color={C.primaryForeground} />
@@ -294,6 +477,7 @@ export function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
     </View>
+    </>
   );
 }
 
@@ -368,13 +552,34 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
   },
+  // ── Attachment preview strip ──
+  attachmentPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  attachmentPreviewName: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+  },
+  // ── Input bar ──
   inputBar: {
     borderTopWidth: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 10,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  attachBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 5,
   },
   inputWrap: {
     flex: 1,

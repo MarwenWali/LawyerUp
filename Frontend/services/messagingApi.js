@@ -1,4 +1,4 @@
-import { api } from '@/services/api';
+import { api, BASE_URL, getToken } from '@/services/api';
 
 export const messagingApi = {
   getFirstAdminUser: async () => {
@@ -25,14 +25,43 @@ export const messagingApi = {
       content,
     }),
 
-  sendMessageWithAttachment: ({ conversationId, content, attachment }) => {
-    const formData = new FormData();
-    if (content) formData.append('content', content);
-    formData.append('attachment', attachment);
+  /**
+   * Send a message with an optional file attachment.
+   * Uses multipart/form-data so the file bytes reach the backend.
+   */
+  sendMessageWithAttachment: async ({ conversationId, content, attachment }) => {
+    const token = await getToken();
 
-    return api.post(`/api/conversations/${conversationId}/messages`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const formData = new FormData();
+    if (content && content.trim()) {
+      formData.append('content', content.trim());
+    }
+    if (attachment) {
+      // React Native FormData expects { uri, name, type }
+      formData.append('attachment', {
+        uri: attachment.uri,
+        name: attachment.name || 'attachment',
+        type: attachment.type || 'application/octet-stream',
+      });
+    }
+
+    const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
     });
+
+    let data;
+    try { data = await res.json(); } catch { data = {}; }
+    if (!res.ok) {
+      const err = new Error(data?.error || data?.message || 'Upload failed');
+      err.status = res.status;
+      throw err;
+    }
+    return data;
   },
 
   markConversationRead: (conversationId) =>

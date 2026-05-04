@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { 
   MessageSquare, Send, RefreshCw, Search, MoreVertical, 
   Phone, Video, Info, PlusCircle, Camera, Image as ImageIcon, 
-  Mic, Globe, Smile, ThumbsUp, Edit 
+  Mic, Globe, Smile, ThumbsUp, Edit, Paperclip, X, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { adminAPI } from '../lib/api.js';
@@ -21,8 +21,10 @@ export default function Messages() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingFile, setPendingFile] = useState(null); // { file: File, preview: string }
   
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const scrollToBottom = (behavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -150,10 +152,12 @@ export default function Messages() {
 
   async function handleSendMessage() {
     const content = draft.trim();
-    if (!selectedLawyerId || !content || sending) return;
+    if (!selectedLawyerId || (!content && !pendingFile) || sending) return;
 
     setSending(true);
     setDraft('');
+    const fileToSend = pendingFile;
+    setPendingFile(null);
     try {
       let conversationId = activeConversation?.id;
 
@@ -165,16 +169,35 @@ export default function Messages() {
       }
 
       if (conversationId) {
-        await messagingAPI.sendMessage(conversationId, content);
+        if (fileToSend) {
+          await messagingAPI.sendMessageWithAttachment(conversationId, content, fileToSend.file);
+        } else {
+          await messagingAPI.sendMessage(conversationId, content);
+        }
         await loadMessages(conversationId, { silent: true });
         scrollToBottom();
       }
     } catch (error) {
       toast.error(error.message || 'Message failed to send');
       setDraft(content);
+      if (fileToSend) setPendingFile(fileToSend);
     } finally {
       setSending(false);
     }
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    setPendingFile({
+      file,
+      preview: isImage ? URL.createObjectURL(file) : null,
+      name: file.name,
+      isImage,
+    });
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
   }
 
   return (
@@ -335,12 +358,48 @@ export default function Messages() {
 
             {/* Input Footer */}
             <div className="p-4 pt-2">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+
+              {/* Attachment preview strip */}
+              {pendingFile && (
+                <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-gray-50 rounded-xl border border-gray-200">
+                  {pendingFile.isImage && pendingFile.preview ? (
+                    <img src={pendingFile.preview} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-[#0084FF] flex-shrink-0" />
+                  )}
+                  <span className="flex-1 text-[13px] text-gray-700 truncate">{pendingFile.name}</span>
+                  <button
+                    onClick={() => setPendingFile(null)}
+                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    title="Remove attachment"
+                  >
+                    <X className="w-4 h-4 text-gray-500" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 mb-2">
                 <div className="flex gap-1.5 px-1">
                   <PlusCircle className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80" />
                   <Camera className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80" />
-                  <ImageIcon className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80" />
-                  <Mic className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80" />
+                  <ImageIcon
+                    className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Send image"
+                  />
+                  <Paperclip
+                    className="w-6 h-6 text-[#0084FF] cursor-pointer hover:opacity-80"
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Send file"
+                  />
                 </div>
                 
                 <div className="flex-1 relative flex items-center bg-[#F0F2F5] rounded-full px-4 py-2">
@@ -361,7 +420,7 @@ export default function Messages() {
                 </div>
 
                 <div className="flex-shrink-0">
-                  {draft.trim() ? (
+                  {(draft.trim() || pendingFile) ? (
                     <button 
                       onClick={handleSendMessage}
                       disabled={sending}

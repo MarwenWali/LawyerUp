@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -20,6 +23,8 @@ import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/utils/supabase';
 import { messagingApi } from '@/services/messagingApi';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 function formatTime(isoDate) {
   if (!isoDate) return '';
@@ -64,8 +69,58 @@ function normalizeMessages(input) {
     created_at: item.created_at,
     read_by_all: item.read_by_all || false,
     read_by_me: item.read_by_me || false,
+    // ── Attachment fields — must be preserved for rendering ──
+    message_type:    item.message_type    || 'text',
+    attachment_url:  item.attachment_url  || null,
+    attachment_name: item.attachment_name || null,
+    attachment_type: item.attachment_type || null,
   }));
 }
+
+/** Full-screen image preview modal */
+function ImagePreviewModal({ uri, onClose }) {
+  const { width, height } = Dimensions.get('window');
+  return (
+    <Modal
+      visible={Boolean(uri)}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <View style={previewStyles.overlay}>
+        <Pressable style={previewStyles.closeBtn} onPress={onClose} hitSlop={16}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
+        {uri ? (
+          <Image
+            source={{ uri }}
+            style={{ width, height: height * 0.85 }}
+            resizeMode="contain"
+          />
+        ) : null}
+      </View>
+    </Modal>
+  );
+}
+
+const previewStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 52,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    padding: 6,
+  },
+});
 
 function Receipt({ readByAll, color }) {
   return (
@@ -101,12 +156,62 @@ export default function UserInboxPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatSending, setChatSending] = useState(false);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState(null);
   const typingTimerRef = useRef(null);
   const typingChannelRef = useRef(null);
   const refreshTimerRef = useRef(null);
   const chatLoadVersionRef = useRef(0);
 
-  const canSend = useMemo(() => Boolean(chatInput.trim()) && !chatSending, [chatInput, chatSending]);
+  const canSend = useMemo(() => (Boolean(chatInput.trim()) || pendingAttachment) && !chatSending, [chatInput, chatSending, pendingAttachment]);
+
+  // Image preview state
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
+
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission needed', 'Permission to access the camera roll is required!');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        setPendingAttachment({
+          uri: asset.uri,
+          name: asset.fileName || asset.uri.split('/').pop() || 'screenshot.jpg',
+          type: asset.mimeType || 'image/jpeg',
+          currentChatId: selectedConversation?.id,
+        });
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+    }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled) {
+        const asset = result.assets[0];
+        setPendingAttachment({
+          uri: asset.uri,
+          name: asset.name,
+          type: asset.mimeType || 'application/pdf',
+          currentChatId: selectedConversation?.id,
+        });
+      }
+    } catch (error) {
+      console.error("Error picking document:", error);
+    }
+  };
 
   const loadConversations = useCallback(async (isRefresh = false) => {
     if (!user?.id) return;
@@ -324,13 +429,30 @@ export default function UserInboxPage() {
   async function handleSendMessage() {
     if (!canSend || !selectedConversation?.id) return;
 
+    if (pendingAttachment && pendingAttachment.currentChatId !== selectedConversation.id) {
+      console.error("Security Alert: Attachment belongs to a different chat!");
+      setPendingAttachment(null);
+      return;
+    }
+
     const content = chatInput.trim();
     setChatInput('');
     setChatSending(true);
 
     try {
       await sendTyping(false);
-      await messagingApi.sendMessage({ conversationId: selectedConversation.id, content });
+      
+      if (pendingAttachment) {
+        await messagingApi.sendMessageWithAttachment({ 
+          conversationId: selectedConversation.id, 
+          content, 
+          attachment: pendingAttachment 
+        });
+        setPendingAttachment(null);
+      } else {
+        await messagingApi.sendMessage({ conversationId: selectedConversation.id, content });
+      }
+      
       await loadChatMessages();
     } catch (error) {
       console.error('Send error:', error);
@@ -502,6 +624,9 @@ export default function UserInboxPage() {
                 refreshing={chatRefreshing}
                 renderItem={({ item }) => {
                   const mine = item.sender_id === user?.id;
+                  const isImage = item.message_type === 'image';
+                  const isFile  = item.message_type === 'file';
+                  const hasAttachment = isImage || isFile;
                   return (
                     <View style={[styles.msgRow, mine ? styles.mineRow : styles.theirRow]}>
                       <View
@@ -510,16 +635,63 @@ export default function UserInboxPage() {
                           mine
                             ? { backgroundColor: C.tint }
                             : { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 },
+                          hasAttachment && { paddingHorizontal: 8, paddingVertical: 8 },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.msgText,
-                            { color: mine ? C.primaryForeground : C.foreground },
-                          ]}
-                        >
-                          {item.content}
-                        </Text>
+                        {/* ── Image attachment ── */}
+                        {isImage && item.attachment_url ? (
+                          <Pressable
+                            onPress={() => setPreviewImageUrl(item.attachment_url)}
+                            style={styles.imageWrapper}
+                          >
+                            <Image
+                              source={{ uri: item.attachment_url }}
+                              style={styles.attachedImage}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.expandHint}>
+                              <Ionicons name="expand-outline" size={13} color="rgba(255,255,255,0.9)" />
+                            </View>
+                          </Pressable>
+                        ) : null}
+
+                        {/* ── File attachment ── */}
+                        {isFile && item.attachment_url ? (
+                          <Pressable
+                            onPress={() => Linking.openURL(item.attachment_url).catch(() => {})}
+                            style={[
+                              styles.fileRow,
+                              { backgroundColor: mine ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.06)' },
+                            ]}
+                          >
+                            <Ionicons name="document-text-outline" size={20} color={mine ? '#fff' : C.foreground} />
+                            <Text
+                              style={[styles.fileName, { color: mine ? '#fff' : C.foreground }]}
+                              numberOfLines={2}
+                            >
+                              {item.attachment_name || 'Attachment'}
+                            </Text>
+                            <Ionicons
+                              name="download-outline"
+                              size={16}
+                              color={mine ? 'rgba(255,255,255,0.7)' : C.mutedForeground}
+                            />
+                          </Pressable>
+                        ) : null}
+
+                        {/* ── Text content ── */}
+                        {item.content ? (
+                          <Text
+                            style={[
+                              styles.msgText,
+                              { color: mine ? C.primaryForeground : C.foreground },
+                              hasAttachment && { paddingHorizontal: 4, marginTop: 4 },
+                            ]}
+                          >
+                            {item.content}
+                          </Text>
+                        ) : null}
+
                         <View style={styles.metaRow}>
                           <Text
                             style={[
@@ -553,6 +725,16 @@ export default function UserInboxPage() {
                   },
                 ]}
               >
+                {pendingAttachment && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.muted, padding: 8, borderRadius: 8, marginBottom: 4, alignSelf: 'flex-start' }}>
+                    <Ionicons name={pendingAttachment.type.includes('image') ? 'image' : 'document-text'} size={20} color={C.foreground} />
+                    <Text style={{ marginLeft: 8, color: C.foreground, maxWidth: 200 }} numberOfLines={1}>{pendingAttachment.name}</Text>
+                    <Pressable onPress={() => setPendingAttachment(null)} style={{ marginLeft: 8 }}>
+                      <Ionicons name="close-circle" size={20} color={C.tint} />
+                    </Pressable>
+                  </View>
+                )}
+
                 {otherTyping && (
                   <View style={styles.typingIndicator}>
                     <Text style={[styles.typingText, { color: C.mutedForeground }]}>
@@ -572,6 +754,12 @@ export default function UserInboxPage() {
                     { backgroundColor: C.inputBg || C.muted, borderColor: C.border },
                   ]}
                 >
+                  <Pressable onPress={pickImage} style={{ padding: 4 }}>
+                    <Ionicons name="image-outline" size={22} color={C.mutedForeground} />
+                  </Pressable>
+                  <Pressable onPress={pickDocument} style={{ padding: 4 }}>
+                    <Ionicons name="document-attach-outline" size={22} color={C.mutedForeground} />
+                  </Pressable>
                   <TextInput
                     style={[styles.input, { color: C.foreground }]}
                     placeholder="Type a message..."
@@ -603,6 +791,9 @@ export default function UserInboxPage() {
           )}
         </View>
       </Modal>
+
+      {/* Full-screen image preview */}
+      <ImagePreviewModal uri={previewImageUrl} onClose={() => setPreviewImageUrl(null)} />
     </>
   );
 }
@@ -691,4 +882,38 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 8 },
   sendBtn: { padding: 8, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  // ── Attachment rendering ──
+  imageWrapper: {
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  attachedImage: {
+    width: 210,
+    height: 150,
+    borderRadius: 10,
+  },
+  expandHint: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 10,
+    padding: 3,
+  },
+  fileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  fileName: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    lineHeight: 16,
+  },
 });

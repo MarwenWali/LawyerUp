@@ -63,7 +63,7 @@ const io = new SocketIOServer(httpServer, {
 app.set('io', io);
 initializeSocket(io);
 
-// Serve static files (uploads)
+// Serve static files (uploads) — includes /uploads/messages for chat attachments
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health check

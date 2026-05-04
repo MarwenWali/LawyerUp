@@ -99,7 +99,7 @@ function updateConversationPreview(conversation, message, currentUserId) {
       status: 'active',
       unread_count: message.sender_id === currentUserId ? 0 : 1,
       last_message: message,
-      last_message_preview: message.content,
+      last_message_preview: message.content || (message.message_type === 'image' ? '🖼 Image' : message.message_type === 'file' ? `📎 ${message.attachment_name || 'Attachment'}` : ''),
       other_participant: null,
     };
   }
@@ -108,11 +108,17 @@ function updateConversationPreview(conversation, message, currentUserId) {
     ? Number(conversation.unread_count || 0)
     : Number(conversation.unread_count || 0) + 1;
 
+  // Build a meaningful preview for attachment messages
+  const preview = message.content
+    || (message.message_type === 'image' ? '🖼 Image'
+    : message.message_type === 'file'  ? `📎 ${message.attachment_name || 'Attachment'}`
+    : '');
+
   return normalizeConversation({
     ...conversation,
     last_message_at: message.created_at,
     last_message: message,
-    last_message_preview: message.content,
+    last_message_preview: preview,
     unread_count: nextUnread,
   }, currentUserId);
 }
@@ -157,12 +163,17 @@ export function ChatProvider({ children }) {
       const currentMessages = prev[conversationId] || [];
       const sortedNextMessages = sortByDate(nextMessages || []);
       
-      // State guard: prevent update if messages are identical
-      const messagesAreIdentical = currentMessages.length === sortedNextMessages.length &&
+      // State guard: skip update only when messages are truly identical.
+      // Compare length AND last message id so that attachment refreshes always apply.
+      const lastCurrent = currentMessages[currentMessages.length - 1];
+      const lastNext    = sortedNextMessages[sortedNextMessages.length - 1];
+      const messagesAreIdentical =
+        currentMessages.length === sortedNextMessages.length &&
+        lastCurrent?.id === lastNext?.id &&
         currentMessages.every((msg, index) => msg.id === sortedNextMessages[index]?.id);
       
       if (messagesAreIdentical) {
-        return prev; // Return previous state to prevent re-render
+        return prev;
       }
       
       return {
@@ -186,49 +197,51 @@ export function ChatProvider({ children }) {
 
   const appendConversationMessages = useCallback((conversationId, incomingMessages) => {
     if (!conversationId) return;
-    
-    // Get the conversation to validate message types before appending
+
+    const incomingList = Array.isArray(incomingMessages) ? incomingMessages : [incomingMessages].filter(Boolean);
+    if (incomingList.length === 0) return;
+
+    // Role-guard: only filter when we have a confirmed conversation and a definitive sender role.
+    // If sender_role is missing we let the message through (e.g. optimistic messages).
     const currentConversations = currentConversationsRef.current || [];
     const existingConversation = currentConversations.find(conv => conv.id === conversationId);
-    
+
+    let validMessages = incomingList;
+
     if (existingConversation) {
-      const participantRole = existingConversation.other_participant?.role || existingConversation.other_participant_role || 'unknown';
-      
-      // Validate incoming messages match the conversation type
-      const validMessages = (incomingMessages || []).filter(message => {
-        const senderRole = message.sender_role || message.sender?.role || 'unknown';
-        
-        // Only allow messages that match the conversation type
+      const participantRole = existingConversation.other_participant?.role
+        || existingConversation.other_participant_role
+        || 'unknown';
+
+      validMessages = incomingList.filter(message => {
+        // Resolve sender role from either top-level field OR nested sender object
+        const senderRole = message.sender_role || message.sender?.role || null;
+
+        // If we can't determine the sender role, allow the message through
+        if (!senderRole || senderRole === 'unknown') return true;
+
+        // Only block messages that DEFINITELY cross conversation type boundaries
         if (participantRole === 'admin') {
-          return senderRole === 'admin' || senderRole === 'unknown';
+          return senderRole === 'admin' || senderRole === 'lawyer';
         } else {
+          // In a user↔lawyer conversation, block messages from admins only
           return senderRole !== 'admin';
         }
       });
-      
-      // Only proceed if we have valid messages
+
       if (validMessages.length === 0) {
-        console.warn(`No valid messages for conversation ${conversationId} with participant role ${participantRole}`);
+        console.warn(`[ChatContext] appendConversationMessages: all messages filtered for conversation ${conversationId} (participantRole=${participantRole})`);
         return;
       }
-      
-      setMessagesByConversation((prev) => {
-        const current = prev[conversationId] || [];
-        return {
-          ...prev,
-          [conversationId]: updateMessages(current, validMessages),
-        };
-      });
-    } else {
-      // If conversation doesn't exist, proceed with original logic
-      setMessagesByConversation((prev) => {
-        const current = prev[conversationId] || [];
-        return {
-          ...prev,
-          [conversationId]: updateMessages(current, incomingMessages || []),
-        };
-      });
     }
+
+    setMessagesByConversation((prev) => {
+      const current = prev[conversationId] || [];
+      return {
+        ...prev,
+        [conversationId]: updateMessages(current, validMessages),
+      };
+    });
   }, []);
 
   const replaceTemporaryMessage = useCallback((conversationId, clientMessageId, savedMessage) => {
@@ -307,25 +320,32 @@ export function ChatProvider({ children }) {
     const message = payload?.message;
     if (!conversationId || !message) return;
 
-    // Use a ref to get current conversations without creating dependency
     const currentConversations = currentConversationsRef.current || [];
-    
-    // Get the conversation to check its type
     const existingConversation = currentConversations.find(conv => conv.id === conversationId);
-    
-    // If conversation exists, check if it's the correct type before processing
+
     if (existingConversation) {
-      const participantRole = existingConversation.other_participant?.role || existingConversation.other_participant_role || 'unknown';
-      
-      // Only process messages for conversations that match their intended type
-      // This prevents user messages from appearing in admin conversations and vice versa
-      if ((participantRole === 'admin' && message.sender_role !== 'admin') ||
-          (participantRole !== 'admin' && message.sender_role === 'admin')) {
-        console.warn(`Message type mismatch for conversation ${conversationId}:`, {
-          conversationParticipantRole: participantRole,
-          messageSenderRole: message.sender_role,
-        });
-        return; // Don't process messages that don't match the conversation type
+      const participantRole = existingConversation.other_participant?.role
+        || existingConversation.other_participant_role
+        || 'unknown';
+
+      // Resolve sender role from nested sender object (the correct field from the API)
+      const senderRole = message.sender?.role || message.sender_role || null;
+
+      // Only block the message if we have definitive role information AND it clearly
+      // crosses conversation type boundaries (e.g. an admin message in a user↔lawyer chat)
+      if (senderRole && senderRole !== 'unknown') {
+        const crossesBoundary =
+          (participantRole === 'admin' && senderRole !== 'admin' && senderRole !== 'lawyer') ||
+          (participantRole !== 'admin' && senderRole === 'admin' && participantRole !== 'unknown');
+
+        if (crossesBoundary) {
+          console.warn(`[ChatContext] handleNewMessage: dropped cross-boundary message`, {
+            conversationId,
+            participantRole,
+            senderRole,
+          });
+          return;
+        }
       }
     }
 

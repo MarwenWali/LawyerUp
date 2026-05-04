@@ -121,12 +121,18 @@ export function initializeSocket(io) {
           throw new Error('conversationId is required');
         }
 
+        // Note: file attachments cannot be sent via socket (binary transfer limitation).
+        // Attachments should be uploaded via the REST endpoint. Socket only handles text.
         const message = await createConversationMessage({
           conversationId,
           senderId: userId,
           content,
           clientMessageId: payload?.clientMessageId || payload?.client_message_id || null,
           io,
+          // Attachment metadata passed from socket if available (e.g. after REST upload)
+          attachmentUrl: payload?.attachmentUrl || null,
+          attachmentName: payload?.attachmentName || null,
+          attachmentType: payload?.attachmentType || null,
         });
 
         if (typeof ack === 'function') {
