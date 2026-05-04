@@ -41,7 +41,7 @@ async function ensureBucket() {
  * Upload a file buffer to Supabase Storage and return the permanent public URL.
  * Falls back to null if Supabase is not configured (will cause 400 — no attachment).
  */
-async function uploadToSupabase(buffer, originalname, mimetype) {
+export async function uploadToSupabase(buffer, originalname, mimetype) {
   await ensureBucket();
   const ext = path.extname(originalname) || '';
   const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;

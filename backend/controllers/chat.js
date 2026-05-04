@@ -2,6 +2,7 @@ import pool from '../config/database.js';
 import { GoogleGenAI } from '@google/genai';
 import { supabaseAdmin } from '../config/supabase.js';
 import { lawyerAppTools, getLawyers, sendMessageToLawyer } from '../services/aiTools.js';
+import { uploadToSupabase } from './messageController.js';
 
 const ai = new GoogleGenAI({ 
   apiKey: process.env.GEMINI_API_KEY,
@@ -168,8 +169,9 @@ export async function saveMessages(req, res) {
 export async function generateReply(req, res) {
   try {
     const content = String(req.body?.content || '').trim();
-    if (!content) {
-      return res.status(400).json({ error: 'content is required' });
+    // Allow empty content ONLY if an attachment is provided
+    if (!content && !req.file) {
+      return res.status(400).json({ error: 'content or attachment is required' });
     }
 
     const { rows: sess } = await pool.query(
@@ -178,12 +180,30 @@ export async function generateReply(req, res) {
     );
     if (!sess.length) return res.status(404).json({ error: 'Session not found' });
 
+    let attachmentUrl = null;
+    let attachmentName = null;
+    let attachmentType = null;
+    let messageType = 'text';
+
+    if (req.file) {
+      attachmentName = req.file.originalname;
+      attachmentType = req.file.mimetype;
+      messageType = req.file.mimetype.startsWith('image/') ? 'image' : 'file';
+      
+      try {
+        attachmentUrl = await uploadToSupabase(req.file.buffer, attachmentName, attachmentType);
+      } catch (err) {
+        console.warn('[AI Agent] Failed to upload attachment to Supabase:', err);
+        // Continue, but without attachmentUrl
+      }
+    }
+
     // Save user message
     const { rows: insertedUserRows } = await pool.query(
-      `INSERT INTO chat_messages (session_id, sender, content)
-       VALUES ($1, 'user', $2)
-       RETURNING id, sender, content, created_at`,
-      [req.params.id, content]
+      `INSERT INTO chat_messages (session_id, sender, content, message_type, attachment_url, attachment_name, attachment_type)
+       VALUES ($1, 'user', $2, $3, $4, $5, $6)
+       RETURNING id, sender, content, created_at, message_type, attachment_url, attachment_name, attachment_type`,
+      [req.params.id, content || '', messageType, attachmentUrl, attachmentName, attachmentType]
     );
     const userMessage = insertedUserRows[0];
 
@@ -245,18 +265,37 @@ Confirmation: ONLY call sendMessageToLawyer after the user explicitly confirms (
 
 Tone: Be professional but friendly. Respond in Tunisian Derja if the user writes in Derja, in French if they write in French, otherwise English or Arabic.
 
+Images and Files: The user may send you images or documents. Analyze them as best you can to assist the user. If they sent a document, you might not be able to read its contents directly if it's a PDF, but you can read images. Inform the user what you see.
+
 Legal Context (use this to answer law questions):
 ${contextText || 'No specific legal articles found for this query. Answer based on general Tunisian law knowledge.'}`;
 
       const conversationHistory = historyRows.map(row => ({
         role: row.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: row.content }],
+        parts: [{ text: row.content || '' }],
       }));
+
+      // Start current user turn
+      const userParts = [];
+      if (content) userParts.push({ text: content });
+      else if (!content && req.file) userParts.push({ text: `[User attached a ${messageType}]` });
+      
+      // If user sent an image, attach it to Gemini
+      if (req.file && messageType === 'image') {
+        userParts.push({
+          inlineData: {
+            data: req.file.buffer.toString('base64'),
+            mimeType: req.file.mimetype,
+          }
+        });
+      }
 
       // Safety: Gemini requires at least one user-role content
       let currentContents = conversationHistory.length > 0
         ? [...conversationHistory]
-        : [{ role: 'user', parts: [{ text: content }] }];
+        : [];
+      
+      currentContents.push({ role: 'user', parts: userParts });
 
       let MAX_TURNS = 5;
       let turnCount = 0;

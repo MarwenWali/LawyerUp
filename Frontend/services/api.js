@@ -142,7 +142,19 @@ export const chatApi = {
   updateTitle:   (id, title)      => api.patch(`/api/chat/sessions/${id}/title`, { title }),
   getMessages:   (id)             => api.get(`/api/chat/sessions/${id}/messages`),
   saveMessages:  (id, messages)   => api.post(`/api/chat/sessions/${id}/messages`, { messages }),
-  askAssistant:  (id, content)    => api.post(`/api/chat/sessions/${id}/reply`, { content }),
+  askAssistant:  (id, content, attachment = null) => {
+    if (attachment) {
+      const formData = new FormData();
+      if (content) formData.append('content', content);
+      formData.append('attachment', {
+        uri: attachment.uri,
+        name: attachment.name || 'attachment',
+        type: attachment.type || 'application/octet-stream',
+      });
+      return api.upload(`/api/chat/sessions/${id}/reply`, formData);
+    }
+    return api.post(`/api/chat/sessions/${id}/reply`, { content });
+  },
 };
 
 // Admin functionality has been moved to the web dashboard (admin-dashboard/).

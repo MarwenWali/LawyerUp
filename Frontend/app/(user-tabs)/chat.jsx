@@ -2,8 +2,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, FlatList,
-  Platform, KeyboardAvoidingView, ActivityIndicator, Alert, Keyboard
+  Platform, KeyboardAvoidingView, ActivityIndicator, Alert, Keyboard,
+  Image, Linking, Modal, Dimensions
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons, Feather } from '@expo/vector-icons';
@@ -15,7 +18,27 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { AI_SUGGESTED_QUESTIONS } from '@/constants/mockData';
 import { chatApi } from '@/services/api';
 
-function MessageBubble({ msg, C, isDark }) {
+/** Full-screen image preview modal */
+function ImagePreviewModal({ uri, onClose }) {
+  const { width, height } = Dimensions.get('window');
+  return (
+    <Modal visible={Boolean(uri)} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={previewStyles.overlay}>
+        <Pressable style={previewStyles.closeBtn} onPress={onClose} hitSlop={16}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
+        {uri ? <Image source={{ uri }} style={{ width, height: height * 0.85 }} resizeMode="contain" /> : null}
+      </View>
+    </Modal>
+  );
+}
+
+const previewStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
+  closeBtn: { position: 'absolute', top: 52, right: 20, zIndex: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, padding: 6 },
+});
+
+function MessageBubble({ msg, C, isDark, onImagePress }) {
   const isUser = msg.sender === 'user';
   return (
     <Animated.View entering={FadeIn.duration(300)} style={[styles.bubbleRow, isUser && styles.bubbleRowUser]}>
@@ -25,7 +48,33 @@ function MessageBubble({ msg, C, isDark }) {
         </View>
       )}
       <View style={[styles.bubble, isUser ? [styles.bubbleUser, { backgroundColor: C.chatUser }] : [styles.bubbleAi, { backgroundColor: C.chatAi }]]}>
-        <Text style={[styles.bubbleText, isUser ? { color: isDark ? '#0B1120' : '#FDF6E3' } : { color: C.foreground }]}>{msg.content}</Text>
+        {msg.message_type === 'image' && msg.attachment_url && (
+          <Pressable onPress={() => onImagePress(msg.attachment_url)} style={{ marginBottom: msg.content ? 8 : 0 }}>
+            <Image source={{ uri: msg.attachment_url }} style={{ width: 220, height: 220, borderRadius: 12, backgroundColor: C.muted }} />
+            <View style={{ position: 'absolute', right: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.5)', padding: 4, borderRadius: 12 }}>
+              <Ionicons name="expand" size={16} color="#fff" />
+            </View>
+          </Pressable>
+        )}
+
+        {msg.message_type === 'file' && msg.attachment_url && (
+          <Pressable
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isUser ? 'rgba(0,0,0,0.1)' : C.card, padding: 12, borderRadius: 12, marginBottom: msg.content ? 8 : 0 }}
+            onPress={() => Linking.openURL(msg.attachment_url)}
+          >
+            <View style={{ backgroundColor: isUser ? 'rgba(0,0,0,0.1)' : C.background, padding: 8, borderRadius: 8, marginRight: 12 }}>
+              <Ionicons name="document-text" size={24} color={isUser ? (isDark ? '#0B1120' : '#FDF6E3') : C.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: isUser ? (isDark ? '#0B1120' : '#FDF6E3') : C.foreground, fontWeight: '600' }} numberOfLines={1}>{msg.attachment_name}</Text>
+              <Text style={{ color: isUser ? (isDark ? 'rgba(11,17,32,0.7)' : 'rgba(253,246,227,0.7)') : C.mutedForeground, fontSize: 12 }}>Tap to view</Text>
+            </View>
+          </Pressable>
+        )}
+
+        {!!msg.content && (
+          <Text style={[styles.bubbleText, isUser ? { color: isDark ? '#0B1120' : '#FDF6E3' } : { color: C.foreground }]}>{msg.content}</Text>
+        )}
       </View>
     </Animated.View>
   );
@@ -100,6 +149,8 @@ export default function ChatPage() {
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [creating, setCreating] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [previewImageUri, setPreviewImageUri] = useState(null);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -188,20 +239,63 @@ export default function ChatPage() {
   }
 
   // ── Messaging ──────────────────────────────────────────────────────────
+  const pickImage = async () => {
+    if (isTyping) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setPendingAttachment({
+        uri: result.assets[0].uri,
+        type: result.assets[0].mimeType || 'image/jpeg',
+        name: result.assets[0].fileName || 'image.jpg',
+      });
+    }
+  };
+
+  const pickDocument = async () => {
+    if (isTyping) return;
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      copyToCacheDirectory: true,
+    });
+    if (!result.canceled) {
+      setPendingAttachment({
+        uri: result.assets[0].uri,
+        type: result.assets[0].mimeType || 'application/pdf',
+        name: result.assets[0].name || 'document.pdf',
+      });
+    }
+  };
+
   const sendMessage = useCallback(async (text) => {
-    if (!text.trim() || isTyping || !activeSession) return;
+    const hasText = text.trim().length > 0;
+    if ((!hasText && !pendingAttachment) || isTyping || !activeSession) return;
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     const isFirstUserMsg = !messages.some(m => m.sender === 'user');
-    const userMsg = { id: Date.now().toString(), content: text.trim(), sender: 'user', created_at: new Date().toISOString() };
+    
+    // Optimistic user message
+    const userMsg = { 
+      id: Date.now().toString(), 
+      content: text.trim(), 
+      sender: 'user', 
+      created_at: new Date().toISOString(),
+      message_type: pendingAttachment ? (pendingAttachment.type.startsWith('image/') ? 'image' : 'file') : 'text',
+      attachment_url: pendingAttachment?.uri,
+      attachment_name: pendingAttachment?.name,
+    };
 
     setMessages(prev => [...prev.filter(m => m.id !== '__welcome__'), userMsg]);
     setInput('');
+    const currentAttachment = pendingAttachment;
+    setPendingAttachment(null);
     setIsTyping(true);
 
     // Auto-title from first message
     if (isFirstUserMsg) {
-      const newTitle = text.trim().slice(0, 60);
+      const newTitle = (hasText ? text.trim() : currentAttachment.name).slice(0, 60);
       try {
         await chatApi.updateTitle(activeSession.id, newTitle);
         setActiveSession(prev => ({ ...prev, title: newTitle }));
@@ -210,7 +304,12 @@ export default function ChatPage() {
     }
 
     try {
-      const payload = await chatApi.askAssistant(activeSession.id, text.trim());
+      const payload = await chatApi.askAssistant(activeSession.id, text.trim(), currentAttachment);
+      // Replace optimistic message if real one was returned
+      if (payload?.userMessage) {
+        setMessages(prev => prev.map(m => m.id === userMsg.id ? payload.userMessage : m));
+      }
+      
       const aiMsg = payload?.aiMessage || {
         id: (Date.now() + 1).toString(),
         content: 'AI assistant is temporarily unavailable. Please try again.',
@@ -232,10 +331,10 @@ export default function ChatPage() {
     } finally {
       setIsTyping(false);
     }
-  }, [messages, isTyping, activeSession]);
+  }, [messages, isTyping, activeSession, pendingAttachment]);
 
   const showSuggestions = !messages.some(m => m.sender === 'user') && !isTyping;
-  const renderMsg = useCallback(({ item }) => <MessageBubble msg={item} C={C} isDark={isDark} />, [C, isDark]);
+  const renderMsg = useCallback(({ item }) => <MessageBubble msg={item} C={C} isDark={isDark} onImagePress={setPreviewImageUri} />, [C, isDark]);
 
   // ── VIEW: LOADING ──────────────────────────────────────────────────────
   if (view === 'loading') {
@@ -299,6 +398,7 @@ export default function ChatPage() {
   // ── VIEW: CHAT ─────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
+      <ImagePreviewModal uri={previewImageUri} onClose={() => setPreviewImageUri(null)} />
       <View style={[styles.chatHeader, { paddingTop: insets.top + 8, backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
         <Pressable style={styles.backBtn} onPress={() => setView('history')}>
           <Ionicons name="arrow-back" size={22} color={C.tint} />
@@ -367,7 +467,24 @@ export default function ChatPage() {
         )}
 
         <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: isKeyboardVisible ? 10 : tabBarHeight + 8 }]}>
+          {pendingAttachment && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: C.card, padding: 8, marginHorizontal: 16, marginBottom: 8, borderRadius: 8, borderWidth: 1, borderColor: C.border }}>
+              <Ionicons name={pendingAttachment.type.startsWith('image/') ? "image" : "document"} size={20} color={C.accent} style={{ marginRight: 8 }} />
+              <Text style={{ flex: 1, color: C.foreground, fontSize: 13 }} numberOfLines={1}>{pendingAttachment.name}</Text>
+              <Pressable onPress={() => setPendingAttachment(null)} style={{ padding: 4 }}>
+                <Ionicons name="close-circle" size={20} color={C.mutedForeground} />
+              </Pressable>
+            </View>
+          )}
+          
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
+            <Pressable onPress={pickDocument} style={styles.attachBtn}>
+              <Ionicons name="document-attach-outline" size={22} color={C.mutedForeground} />
+            </Pressable>
+            <Pressable onPress={pickImage} style={styles.attachBtn}>
+              <Ionicons name="image-outline" size={22} color={C.mutedForeground} />
+            </Pressable>
+
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
               placeholder="Ask a legal question..."
@@ -378,9 +495,9 @@ export default function ChatPage() {
               maxLength={500}
             />
             <Pressable
-              style={[styles.sendBtn, { backgroundColor: C.tint }, (!input.trim() || isTyping) && { opacity: 0.4 }]}
+              style={[styles.sendBtn, { backgroundColor: C.tint }, (!input.trim() && !pendingAttachment || isTyping) && { opacity: 0.4 }]}
               onPress={() => sendMessage(input)}
-              disabled={!input.trim() || isTyping}
+              disabled={(!input.trim() && !pendingAttachment) || isTyping}
             >
               <Ionicons name="send" size={18} color={C.primaryForeground} />
             </Pressable>
@@ -437,7 +554,8 @@ const styles = StyleSheet.create({
   suggestionPill: { borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   suggestionText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
   inputBar: { borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, gap: 8 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 4, paddingRight: 4, paddingVertical: 4, gap: 8 },
+  attachBtn: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center' },
   textInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 10 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
 });
