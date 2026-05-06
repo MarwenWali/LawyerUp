@@ -58,22 +58,27 @@ function normalizeConversation(conversation, currentUserId) {
     const currentIsCitizen = String(currentUserId || '') === String(citizen.id || '');
     const currentIsLawyer = String(currentUserId || '') === String(lawyer.id || '');
 
-    normalized.other_participant = currentIsCitizen
-      ? {
-          ...lawyer,
-          initials: resolveInitials(lawyer),
-        }
-      : currentIsLawyer
+    if (currentIsCitizen) {
+      normalized.other_participant = {
+        ...lawyer,
+        initials: resolveInitials(lawyer),
+      };
+    } else if (currentIsLawyer) {
+      normalized.other_participant = {
+        ...citizen,
+        initials: resolveInitials(citizen),
+      };
+    } else {
+      // currentUserId doesn't match either participant (e.g. on first socket event
+      // before auth is ready). Preserve whatever other_participant the backend sent
+      // so the profile photo is never lost.
+      normalized.other_participant = normalized.other_participant
         ? {
-            ...citizen,
-            initials: resolveInitials(citizen),
+            ...normalized.other_participant,
+            initials: resolveInitials(normalized.other_participant),
           }
-        : normalized.other_participant
-          ? {
-              ...normalized.other_participant,
-              initials: resolveInitials(normalized.other_participant),
-            }
-          : null;
+        : null;
+    }
   } else if (normalized.other_participant) {
     normalized.other_participant = {
       ...normalized.other_participant,

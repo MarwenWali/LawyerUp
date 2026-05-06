@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import pool from '../config/database.js';
 import { syncSupabasePasswordForPublicUser } from '../services/supabaseAuthBridge.js';
+import { supabaseAdmin } from '../config/supabase.js';
+import path from 'path';
 
 function getPaginationParams(query, { defaultLimit = 50, maxLimit = 100 } = {}) {
   const page = Math.max(parseInt(query.page, 10) || 1, 1);
@@ -136,12 +138,37 @@ export async function changePassword(req, res) {
 export async function uploadPhoto(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: 'No photo uploaded' });
-    const photoUrl = `/uploads/${req.file.filename}`;
+
+    const ext = path.extname(req.file.originalname) || '.jpg';
+    const storagePath = `${req.user.role}/${req.user.id}/avatar${ext}`;
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('profiles')
+      .upload(storagePath, req.file.buffer, {
+        contentType: req.file.mimetype,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('Supabase upload error:', uploadError);
+      return res.status(500).json({ error: 'Failed to upload photo to storage' });
+    }
+
+    const { data: { publicUrl } } = supabaseAdmin.storage
+      .from('profiles')
+      .getPublicUrl(storagePath);
+
+    // Store the clean URL without a timestamp — the frontend ProfileImage component
+    // adds its own daily cache-bust so the stored URL stays stable and consistent
+    // across all rows that reference this user's photo.
+    const cleanUrl = publicUrl.split('?')[0];
+    const photoUrlWithBust = `${cleanUrl}?t=${Date.now()}`;
+
     await pool.query(
       'UPDATE users SET profile_photo_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [photoUrl, req.user.id]
+      [cleanUrl, req.user.id]
     );
-    res.json({ message: 'Photo updated successfully', profile_photo_url: photoUrl });
+    res.json({ message: 'Photo updated successfully', profile_photo_url: photoUrlWithBust });
   } catch (error) {
     console.error('Upload photo error:', error);
     res.status(500).json({ error: 'Failed to upload photo' });

@@ -37,7 +37,12 @@ export default function MessageBubble({ message, isAdmin, isFirst, isLast, showA
           {showAvatar ? (
             <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500 overflow-hidden border border-gray-100">
               {message.sender?.profile_photo_url ? (
-                <img src={message.sender.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                <img 
+                  src={message.sender.profile_photo_url.includes('?') ? message.sender.profile_photo_url : `${message.sender.profile_photo_url}?t=1`} 
+                  alt="" 
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover" 
+                />
               ) : (
                 (message.sender?.name || 'L').charAt(0)
               )}

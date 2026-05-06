@@ -25,6 +25,7 @@ import { supabase } from '@/utils/supabase';
 import { messagingApi } from '@/services/messagingApi';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import ProfileImage from '@/components/ProfileImage';
 
 function formatTime(isoDate) {
   if (!isoDate) return '';
@@ -175,7 +176,7 @@ export default function UserInboxPage() {
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.8,
       });
@@ -523,11 +524,11 @@ export default function UserInboxPage() {
                 ]}
                 onPress={() => setSelectedConversation(item)}
               >
-                <View style={[styles.avatar, { backgroundColor: C.accentLight }]}>
-                  <Text style={[styles.avatarText, { color: C.accent }]}>
-                    {(item.other_participant?.full_name?.[0] || '?').toUpperCase()}
-                  </Text>
-                </View>
+                <ProfileImage 
+                  url={item.other_participant?.profile_photo_url} 
+                  size={42} 
+                  fallbackText={item.other_participant?.initials || item.other_participant?.full_name?.charAt(0) || '?'}
+                />
 
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>

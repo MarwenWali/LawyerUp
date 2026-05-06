@@ -75,7 +75,7 @@ export default function AllFilesScreen() {
         const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
         if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'camera.jpg', type: 'image/jpeg' });
       } else if (option === 'gallery') {
-        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
         if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'gallery.jpg', type: 'image/jpeg' });
       } else if (option === 'document') {
         const result = await DocumentPicker.getDocumentAsync({});

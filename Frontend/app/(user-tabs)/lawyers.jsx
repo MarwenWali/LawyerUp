@@ -13,8 +13,9 @@ import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { SPECIALIZATIONS } from '@/constants/mockData';
-import { lawyersApi, contactsApi, reviewsApi, BASE_URL } from '@/services/api';
+import { lawyersApi, contactsApi, reviewsApi } from '@/services/api';
 import { messageService } from '@/src/services/messageService';
+import ProfileImage from '@/components/ProfileImage';
 
 // â”€â”€ Star display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Stars({ rating, size = 14, color = '#D4A03C' }) {
@@ -240,8 +241,6 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
 
   if (!lawyer) return null;
 
-  const photoUri = lawyer.profilePhotoUrl ? `${BASE_URL}${lawyer.profilePhotoUrl}` : null;
-  const initials = lawyer.name.replace('MaÃ®tre ', '').split(' ').map(n => n[0]).join('').slice(0, 2);
   const avg = reviewData?.averageRating ?? lawyer.rating ?? 0;
 
   return (
@@ -260,13 +259,7 @@ function LawyerProfileModal({ lawyer, visible, onClose, C, isDark, insets }) {
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* â”€â”€ Lawyer header â”€â”€ */}
             <View style={profileStyles.header}>
-              {photoUri ? (
-                <Image source={{ uri: photoUri }} style={profileStyles.avatar} />
-              ) : (
-                <View style={[profileStyles.avatar, { backgroundColor: C.tint }]}>
-                  <Text style={[profileStyles.avatarText, { color: C.primaryForeground }]}>{initials}</Text>
-                </View>
-              )}
+              <ProfileImage url={lawyer.profilePhotoUrl} size={80} style={{ marginBottom: 12 }} />
               <Text style={[profileStyles.name, { color: C.foreground }]}>{lawyer.name}</Text>
               <Text style={[profileStyles.spec, { color: C.accent }]}>{lawyer.specialization} {t.lawSuffix}</Text>
               <View style={profileStyles.availRow}>
@@ -525,8 +518,6 @@ const profileStyles = StyleSheet.create({
 
 // â”€â”€ Lawyer card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function LawyerCard({ lawyer, onPress, C, t }) {
-  const initials = lawyer.name.replace('MaÃ®tre ', '').split(' ').map(n => n[0]).join('').slice(0, 2);
-  const photoUri = lawyer.profilePhotoUrl ? `${BASE_URL}${lawyer.profilePhotoUrl}` : null;
   return (
     <Pressable
       style={({ pressed }) => [styles.lawyerCard, { backgroundColor: C.card }, pressed && { opacity: 0.92 }]}
@@ -536,13 +527,7 @@ function LawyerCard({ lawyer, onPress, C, t }) {
       }}
     >
       <View style={styles.lawyerTop}>
-        {photoUri ? (
-          <Image source={{ uri: photoUri }} style={styles.lawyerAvatar} />
-        ) : (
-          <View style={[styles.lawyerAvatar, { backgroundColor: C.tint }]}>
-            <Text style={[styles.lawyerInitials, { color: C.primaryForeground }]}>{initials}</Text>
-          </View>
-        )}
+        <ProfileImage url={lawyer.profilePhotoUrl} size={52} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.lawyerName, { color: C.foreground }]}>{lawyer.name}</Text>
             <Text style={[styles.lawyerSpec, { color: C.accent }]}>{lawyer.specialization} {t.lawSuffix}</Text>

@@ -14,6 +14,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { casesApi, notificationsApi, userApi } from '@/services/api';
 import { messagingApi } from '@/services/messagingApi';
 import NotificationsModal from '@/components/NotificationsModal';
+import ProfileImage from '@/components/ProfileImage';
 import UploadActionSheet from '@/components/UploadActionSheet';
 import CreateAppointmentModal from '@/components/CreateAppointmentModal';
 
@@ -119,7 +120,7 @@ export default function UserDashboard() {
         const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
         if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'camera.jpg', type: 'image/jpeg' });
       } else if (option === 'gallery') {
-        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
         if (!result.canceled) processUpload({ uri: result.assets[0].uri, name: 'gallery.jpg', type: 'image/jpeg' });
       } else if (option === 'document') {
         const result = await DocumentPicker.getDocumentAsync({});
@@ -201,13 +202,12 @@ export default function UserDashboard() {
               )}
             </Pressable>
             <Pressable
-              style={[styles.avatar, { backgroundColor: C.tint }]}
               onPress={() => {
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 router.push('/(user-tabs)/profile');
               }}
             >
-              <Text style={[styles.avatarText, { color: C.primaryForeground }]}>{firstName[0]}</Text>
+              <ProfileImage url={user?.profile_photo_url} size={40} />
             </Pressable>
           </View>
         </View>

@@ -10,6 +10,7 @@ import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { casesApi, contactsApi, notificationsApi, lawyersApi } from '@/services/api';
 import NotificationsModal from '@/components/NotificationsModal';
+import ProfileImage from '@/components/ProfileImage';
 
 function formatTimeAgo(dateStr, t) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -117,13 +118,12 @@ export default function LawyerDashboard() {
             )}
           </View>
           <Pressable
-            style={[styles.avatarSmall, { backgroundColor: C.tint }]}
             onPress={() => {
               if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push('/(lawyer-tabs)/profile');
             }}
           >
-            <Text style={[styles.avatarSmallText, { color: C.primaryForeground }]}>{firstName[0]}</Text>
+            <ProfileImage url={user?.profile_photo_url} size={44} />
           </Pressable>
           <NotificationsModal
             visible={notifVisible}

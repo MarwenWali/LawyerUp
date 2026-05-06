@@ -1,4 +1,4 @@
-﻿// Static reference data (no backend equivalent needed)
+// Static reference data (no backend equivalent needed)
 
 // Specializations used as filter pills (includes 'All')
 export const SPECIALIZATIONS = ['All', 'Family', 'Commercial', 'Criminal', 'Labor', 'Property', 'Administrative', 'Tax', 'Immigration'];

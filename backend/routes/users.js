@@ -8,18 +8,19 @@ import {
 
 const router = express.Router();
 
-router.get('/me',             authenticateToken,                  getMe);
-router.put('/me',             authenticateToken,                  updateMe);
-router.patch('/me/password',  authenticateToken,                  changePassword);
-router.post('/me/photo',      authenticateToken, upload.single('photo'), uploadPhoto);
-router.get('/admin',        authenticateToken,                        getFirstAdmin);
-router.get('/vault',        authenticateToken,                        getVaultFiles);
 import multer from 'multer';
 
 const uploadMessage = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
 });
+
+router.get('/me',             authenticateToken,                  getMe);
+router.put('/me',             authenticateToken,                  updateMe);
+router.patch('/me/password',  authenticateToken,                  changePassword);
+router.post('/me/photo',      authenticateToken, uploadMessage.single('photo'), uploadPhoto);
+router.get('/admin',        authenticateToken,                        getFirstAdmin);
+router.get('/vault',        authenticateToken,                        getVaultFiles);
 
 router.post('/vault',       authenticateToken, uploadMessage.single('attachment'), uploadVaultFile);
 router.get('/appointments', authenticateToken, getAppointments);

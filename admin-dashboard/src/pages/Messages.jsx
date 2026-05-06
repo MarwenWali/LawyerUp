@@ -245,7 +245,11 @@ export default function Messages() {
               <div className="relative flex-shrink-0">
                 <div className="w-[56px] h-[56px] rounded-full bg-gray-100 flex items-center justify-center border border-gray-100 overflow-hidden">
                    {disc.other_participant?.profile_photo_url ? (
-                     <img src={disc.other_participant.profile_photo_url} className="w-full h-full object-cover" />
+                     <img 
+                       src={disc.other_participant.profile_photo_url.includes('?') ? disc.other_participant.profile_photo_url : `${disc.other_participant.profile_photo_url}?t=1`} 
+                       referrerPolicy="no-referrer"
+                       className="w-full h-full object-cover" 
+                     />
                    ) : (
                      <span className="text-lg font-bold text-gray-400">{(disc.other_participant?.full_name || 'L').charAt(0)}</span>
                    )}
@@ -293,7 +297,11 @@ export default function Messages() {
               <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden border border-gray-100">
                     {selectedDiscussion?.other_participant?.profile_photo_url ? (
-                      <img src={selectedDiscussion.other_participant.profile_photo_url} className="w-full h-full object-cover" />
+                      <img 
+                        src={selectedDiscussion.other_participant.profile_photo_url.includes('?') ? selectedDiscussion.other_participant.profile_photo_url : `${selectedDiscussion.other_participant.profile_photo_url}?t=1`}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover" 
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center bg-[#14213D] text-white text-sm font-bold">
                         {(selectedDiscussion?.other_participant?.full_name || 'L').charAt(0)}

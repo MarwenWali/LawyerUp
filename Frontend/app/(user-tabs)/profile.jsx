@@ -13,6 +13,7 @@ import { useTheme } from '@/constants/useTheme';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { userApi } from '@/services/api';
+import ProfileImage from '@/components/ProfileImage';
 
 export default function ProfilePage() {
   const { user, logout, updateUser, uploadPhoto } = useAuth();
@@ -49,7 +50,7 @@ export default function ProfilePage() {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -135,13 +136,7 @@ export default function ProfilePage() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
         <View style={styles.profileHeader}>
           <Pressable onPress={handlePhotoUpload} style={styles.avatarWrapper}>
-            {user?.profile_photo_url ? (
-              <Image source={{ uri: user.profile_photo_url }} style={styles.avatarLarge} />
-            ) : (
-              <View style={[styles.avatarLarge, { backgroundColor: C.tint }]}>
-                <Text style={[styles.avatarLargeText, { color: C.primaryForeground }]}>{initials}</Text>
-              </View>
-            )}
+            <ProfileImage url={user?.profile_photo_url} size={80} />
             {photoLoading
               ? <ActivityIndicator style={styles.avatarEdit} color={C.accent} />
               : <View style={[styles.avatarEdit, { backgroundColor: C.accent }]}><Feather name="camera" size={14} color="#fff" /></View>
