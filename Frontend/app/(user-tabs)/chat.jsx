@@ -2,7 +2,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, FlatList,
-  Platform, KeyboardAvoidingView, ActivityIndicator, Alert,
+  Platform, KeyboardAvoidingView, ActivityIndicator, Alert, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -99,10 +99,21 @@ export default function ChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const flatListRef = useRef(null);
 
   // ── Session management ─────────────────────────────────────────────────
   useEffect(() => { loadSessions(); }, []);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   async function loadSessions() {
     try {
@@ -309,7 +320,7 @@ export default function ChatPage() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
       >
         {loadingMsgs ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -350,7 +361,7 @@ export default function ChatPage() {
           </View>
         )}
 
-        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: tabBarHeight + 8 }]}>
+        <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: keyboardVisible ? Math.max(insets.bottom, 8) : tabBarHeight + 8 }]}>
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}

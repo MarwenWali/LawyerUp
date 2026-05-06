@@ -1,5 +1,7 @@
 import pool from '../config/database.js';
 
+let conversationsHasTypeColumnCache = null;
+
 function isCitizenRole(role) {
   return role === 'citizen' || role === 'user';
 }
@@ -146,9 +148,36 @@ async function fetchConversationRow(conversationId, userId, currentRole) {
   return rows[0] || null;
 }
 
-async function fetchConversationPair(citizenId, lawyerId, type) {
-  // Match on type if provided, otherwise fall back to any pair
-  if (type) {
+async function hasConversationTypeColumn() {
+  if (typeof conversationsHasTypeColumnCache === 'boolean') {
+    return conversationsHasTypeColumnCache;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'conversations'
+         AND column_name = 'type'
+       LIMIT 1`
+    );
+
+    conversationsHasTypeColumnCache = rows.length > 0;
+  } catch {
+    conversationsHasTypeColumnCache = false;
+  }
+
+  return conversationsHasTypeColumnCache;
+}
+
+async function fetchConversationPair(citizenId, lawyerId, type, options = {}) {
+  const hasTypeCol = typeof options.hasTypeCol === 'boolean'
+    ? options.hasTypeCol
+    : await hasConversationTypeColumn();
+
+  // Match on type when supported, otherwise fall back to any pair.
+  if (hasTypeCol && type) {
     const { rows } = await pool.query(
       'SELECT * FROM conversations WHERE citizen_id = $1 AND lawyer_id = $2 AND type = $3 LIMIT 1',
       [citizenId, lawyerId, type]
@@ -212,23 +241,25 @@ export async function startConversation(req, res) {
     // Determine type: admin<->lawyer chats use 'admin_lawyer', citizen<->lawyer use 'lawyer_user'
     const convType = (currentRole === 'admin' || targetRole === 'admin') ? 'admin_lawyer' : 'lawyer_user';
 
-    // For admin_lawyer chats, admin occupies the citizen_id slot
-    const citizenId = (currentRole === 'lawyer' && targetRole !== 'admin') ? targetUser.id
-      : (currentRole === 'admin') ? req.user.id
-      : req.user.id;
-    const lawyerId = (currentRole === 'lawyer') ? req.user.id : targetUser.id;
+    // In all conversation rows, lawyer_id must always be the lawyer participant.
+    // citizen_id holds either a citizen user (lawyer_user) or an admin user (admin_lawyer).
+    const isAdminConversation = convType === 'admin_lawyer';
+    const citizenId = isAdminConversation
+      ? (currentRole === 'admin' ? req.user.id : targetUser.id)
+      : (currentRole === 'citizen' ? req.user.id : targetUser.id);
+    const lawyerId = currentRole === 'lawyer' ? req.user.id : targetUser.id;
 
-    let conversation = await fetchConversationPair(citizenId, lawyerId, convType);
+    if (citizenId === lawyerId) {
+      return res.status(400).json({ error: 'Invalid conversation participants' });
+    }
+
+    const hasTypeCol = await hasConversationTypeColumn();
+    const conversationTypeForLookup = hasTypeCol ? convType : null;
+
+    let conversation = await fetchConversationPair(citizenId, lawyerId, conversationTypeForLookup, { hasTypeCol });
     const wasCreated = !conversation;
 
     if (!conversation) {
-      // Check if a type column exists before including it
-      const colCheck = await pool.query(
-        `SELECT 1 FROM information_schema.columns
-         WHERE table_name = 'conversations' AND column_name = 'type' LIMIT 1`
-      );
-      const hasTypeCol = colCheck.rows.length > 0;
-
       const insertQuery = hasTypeCol
         ? `INSERT INTO conversations (citizen_id, lawyer_id, type)
            VALUES ($1, $2, $3)
@@ -245,8 +276,12 @@ export async function startConversation(req, res) {
       if (insertResult.rows.length > 0) {
         conversation = insertResult.rows[0];
       } else {
-        conversation = await fetchConversationPair(citizenId, lawyerId, convType);
+        conversation = await fetchConversationPair(citizenId, lawyerId, conversationTypeForLookup, { hasTypeCol });
       }
+    }
+
+    if (!conversation) {
+      return res.status(500).json({ error: 'Failed to start conversation' });
     }
 
     const conversationRow = await fetchConversationRow(conversation.id, req.user.id, currentRole);

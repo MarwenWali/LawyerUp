@@ -205,7 +205,7 @@ export function ChatScreen() {
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
       >
         {error ? (
           <View style={styles.center}>

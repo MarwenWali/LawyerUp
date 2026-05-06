@@ -1,17 +1,41 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useEffect, Component } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { Text, View } from "react-native";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
-import { ChatProvider } from "@/src/contexts/ChatContext";
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
-import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ChatProvider } from "@/contexts/ChatContext";
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.preventAutoHideAsync().catch(() => { });
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error("ErrorBoundary caught:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
+          <Text style={{ color: '#fff' }}>Error loading app</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function RootLayoutNav() {
   return (
@@ -28,21 +52,15 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const hasHiddenSplashRef = useRef(false);
-  const [fontsLoaded] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-    PlayfairDisplay_700Bold,
-  });
+
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => { });
+  }, []);
 
   const onLayoutRootView = useCallback(() => {
-    if (!fontsLoaded || hasHiddenSplashRef.current) return;
+    if (hasHiddenSplashRef.current) return;
     hasHiddenSplashRef.current = true;
-    SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded]);
-
-  if (!fontsLoaded) return null;
+  }, []);
 
   return (
     <ErrorBoundary>

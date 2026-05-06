@@ -11,23 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AI_SUGGESTED_QUESTIONS } from '@/constants/mockData';
-
-function generateAIResponse(question) {
-  const q = question.toLowerCase();
-  if (q.includes('tenant') || q.includes('rent')) {
-    return 'Under Tunisian law, tenant rights are governed by Law No. 77-37 of 1977. Key protections include:\n\n• Right to a written lease agreement\n• Protection against arbitrary eviction\n• Right to maintenance and repairs\n• Regulated rent increases\n\nI recommend consulting with a property law specialist for your specific situation. Would you like me to connect you with one?';
-  }
-  if (q.includes('business') || q.includes('register') || q.includes('company')) {
-    return 'To register a business in Tunisia, you need to follow the Code des Sociétés Commerciales. The process typically involves:\n\n• Choosing a legal structure (SARL, SA, etc.)\n• Registering with the RNE (Registre National des Entreprises)\n• Obtaining a tax identification number\n• Opening a business bank account\n\nWould you like to speak with a commercial law attorney?';
-  }
-  if (q.includes('divorce')) {
-    return 'Divorce in Tunisia is governed by the Personal Status Code (Majallat al-Ahwal al-Shakhsiyyah). Key points:\n\n• Both spouses have equal right to file\n• Mutual consent or court-ordered divorce\n• Child custody considerations prioritize child welfare\n• Division of shared assets\n\nThis is a sensitive matter. I strongly recommend consulting a family law specialist.';
-  }
-  if (q.includes('employee') || q.includes('worker') || q.includes('labor')) {
-    return 'Employee protections in Tunisia are covered under the Labour Code (Code du Travail). Key protections include:\n\n• Maximum 48-hour work week\n• Minimum wage (SMIG/SMAG) regulations\n• Annual paid leave (at least 1 day per month)\n• Protection against wrongful termination\n• Social security coverage (CNSS)\n\nWould you like to connect with a labor law attorney?';
-  }
-  return `Thank you for your question about "${question}". Based on Tunisian law, this is an area that requires careful analysis of your specific circumstances.\n\nI recommend discussing this with a qualified attorney who can provide personalized legal counsel. Would you like me to connect you with a specialized lawyer?`;
-}
+import { aiApi } from '@/services/api';
 
 function MessageBubble({ msg, C, isDark }) {
   const isUser = msg.sender === 'user';
@@ -131,7 +115,7 @@ export default function LandingPage() {
 
   const sendMessage = useCallback(async (text) => {
     if (!text.trim() || isTyping) return;
-    
+
     // Check if user has reached the limit
     if (guestPromptCount >= 3) {
       setShowLoginModal(true);
@@ -155,21 +139,38 @@ export default function LandingPage() {
     // Increment the count
     const newCount = await incrementGuestPromptCount();
 
-    setTimeout(() => {
+    try {
+      const history = currentMessages
+        .filter((msg) => msg?.sender === 'user' || msg?.sender === 'ai')
+        .map((msg) => ({
+          sender: msg.sender,
+          content: msg.content,
+        }));
+
+      const payload = await aiApi.reply(text.trim(), history);
       const aiMsg = {
         id: (Date.now() + 1).toString(),
-        content: generateAIResponse(text),
+        content: String(payload?.response || '').trim() || 'AI assistant is temporarily unavailable. Please try again.',
         sender: 'ai',
         timestamp: new Date().toISOString(),
       };
-      setMessages(prev => [...prev, aiMsg]);
+      setMessages((prev) => [...prev, aiMsg]);
+    } catch (e) {
+      const aiMsg = {
+        id: (Date.now() + 1).toString(),
+        content: e?.message || 'AI assistant is temporarily unavailable. Please try again.',
+        sender: 'ai',
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+    } finally {
       setIsTyping(false);
 
       // Show login modal after 3 prompts
       if (newCount >= 3) {
         setTimeout(() => setShowLoginModal(true), 1000);
       }
-    }, 1500);
+    }
   }, [messages, isTyping, guestPromptCount]);
 
   const renderItem = useCallback(({ item }) => (
@@ -192,7 +193,7 @@ export default function LandingPage() {
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={[styles.chatHeader, { paddingTop: insets.top + 12, backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
         <View style={styles.headerTop}>
@@ -218,8 +219,8 @@ export default function LandingPage() {
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
               <Text style={[styles.statusText, { color: C.textSecondary }]}>
-                {remainingPrompts > 0 
-                  ? t.freeQuestionsRemaining.replace('{count}', remainingPrompts).replace('{s}', remainingPrompts !== 1 ? 's' : '') 
+                {remainingPrompts > 0
+                  ? t.freeQuestionsRemaining.replace('{count}', remainingPrompts).replace('{s}', remainingPrompts !== 1 ? 's' : '')
                   : t.freeTrialUsed}
               </Text>
             </View>
@@ -231,7 +232,7 @@ export default function LandingPage() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 8 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -301,7 +302,7 @@ export default function LandingPage() {
             <View style={[styles.modalIconContainer, { backgroundColor: C.muted }]}>
               <Ionicons name="lock-closed" size={32} color={C.accent} />
             </View>
-            
+
             <Text style={[styles.modalTitle, { color: C.foreground }]}>{t.continueJourney}</Text>
             <Text style={[styles.modalText, { color: C.textSecondary }]}>
               {t.usedFreeQuestions}
@@ -389,7 +390,7 @@ const styles = StyleSheet.create({
   inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, gap: 8 },
   textInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 10 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
-  
+
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalContent: { width: '100%', maxWidth: 420, borderRadius: 20, padding: 28, alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
@@ -405,3 +406,4 @@ const styles = StyleSheet.create({
   modalSecondaryBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
   modalCloseBtn: { padding: 8 },
 });
+

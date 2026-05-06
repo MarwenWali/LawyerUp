@@ -50,6 +50,19 @@ LEGAL_SIGNAL_TERMS = [
     "CNSS",
 ]
 
+LABOR_SCOPE_PATTERNS = [
+    # EN / FR / Arabizi hints
+    r"\b(work|job|labor|labour|employment|employee|employer|salary|wage|contract|dismiss(?:al)?|fired?|termination|overtime|leave|cnss|travail|emploi|salaire|contrat|licenciement)\b",
+    r"\b(khedma|5edma|3amil|ajir|7a9|7ou9ou9|patron|khallas|salaire|contrat)\b",
+    # Arabic labor-law scope hints (unicode escapes to avoid file-encoding issues)
+    r"(\u0634\u063a\u0644|\u0639\u0645\u0644|\u0639\u0627\u0645\u0644|\u0639\u0645\u0627\u0644|\u0623\u062c\u064a\u0631|\u0623\u062c\u0631|\u0631\u0627\u062a\u0628|\u0637\u0631\u062f|\u0641\u0635\u0644|\u0639\u0642\u062f|\u0633\u0627\u0639\u0627\u062a\s*\u0625\u0636\u0627\u0641\u064a\u0629|\u0625\u062c\u0627\u0632\u0629|\u062a\u0639\u0648\u064a\u0636|\u062a\u0641\u0642\u062f\u064a\u0629\s*\u0627\u0644\u0634\u063a\u0644|\u0627\u0644\u0636\u0645\u0627\u0646\s*\u0627\u0644\u0627\u062c\u062a\u0645\u0627\u0639\u064a|cnss)",
+]
+
+DISALLOWED_TOPIC_PATTERNS = [
+    r"\b(israel|israeli|palestin(?:e|ian)?|gaza|zion)\b",
+    r"(\u0625\u0633\u0631\u0627\u0626\u064a\u0644|\u0627\u0633\u0631\u0627\u0626\u064a\u0644|\u0627\u0644\u0627\u0633\u0631\u0627\u0626\u064a\u0644\u064a|\u0641\u0644\u0633\u0637\u064a\u0646|\u063a\u0632\u0629|\u0627\u0644\u0642\u062f\u0633)",
+]
+
 TOPIC_RULES = [
     {
         "patterns": [
@@ -233,6 +246,26 @@ def _normalize_for_match(text: str) -> str:
     return lowered
 
 
+def _is_disallowed_topic(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    if not normalized:
+        return False
+    for pattern in DISALLOWED_TOPIC_PATTERNS:
+        if re.search(pattern, normalized):
+            return True
+    return False
+
+
+def _is_labor_scope_text(text: str) -> bool:
+    normalized = _normalize_for_match(text)
+    if not normalized:
+        return False
+    for pattern in LABOR_SCOPE_PATTERNS:
+        if re.search(pattern, normalized):
+            return True
+    return False
+
+
 def _extract_semantic_hints(text: str) -> set:
     normalized = _normalize_for_match(text)
     hints = set()
@@ -322,6 +355,9 @@ def _format_legal_response(question: str, answer_text: str) -> str:
     rule = _detect_topic_rule(question, answer_text)
     explanation = _clean_explanation_text(answer_text)
 
+    if _is_disallowed_topic(explanation):
+        explanation = ""
+
     if _looks_gibberish_text(explanation):
         fallback_explanation = _retrieve_fallback_answer(question)
         if fallback_explanation and _contains_arabic(fallback_explanation) and not _looks_gibberish_text(fallback_explanation):
@@ -370,8 +406,13 @@ def _load_fallback_qa_pairs():
                 continue
             q = (item.get("input") or "").strip()
             a = (item.get("output") or "").strip()
-            if q and a:
-                pairs.append((q, a))
+            if not (q and a):
+                continue
+            if _is_disallowed_topic(q) or _is_disallowed_topic(a):
+                continue
+            if not (_is_labor_scope_text(q) or _is_labor_scope_text(a)):
+                continue
+            pairs.append((q, a))
 
     # Deduplicate while preserving order
     seen = set()
@@ -402,6 +443,8 @@ def _retrieve_fallback_answer(question: str) -> Optional[str]:
     best_answer = None
 
     for candidate_q, candidate_a in pairs:
+        if _is_disallowed_topic(candidate_q) or _is_disallowed_topic(candidate_a):
+            continue
         c_norm = _normalize_for_match(candidate_q)
         if not c_norm:
             continue
@@ -420,12 +463,14 @@ def _retrieve_fallback_answer(question: str) -> Optional[str]:
 
     if best_score >= 0.58:
         logger.info("Using retrieval fallback answer (score=%.3f)", best_score)
-        return best_answer
+        if best_answer and not _is_disallowed_topic(best_answer):
+            return best_answer
 
     # For clearly legal queries that generated poor text, accept a lower match threshold.
     if q_hints and best_score >= 0.42:
         logger.info("Using retrieval fallback answer with relaxed threshold (score=%.3f)", best_score)
-        return best_answer
+        if best_answer and not _is_disallowed_topic(best_answer):
+            return best_answer
 
     return None
 

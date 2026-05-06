@@ -2,7 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 const REQUEST_TIMEOUT_MS = 12000;
+const AI_REQUEST_TIMEOUT_MS = Number(process.env.EXPO_PUBLIC_AI_REQUEST_TIMEOUT_MS || '90000');
 const DEFAULT_API_PORT = String(process.env.EXPO_PUBLIC_API_PORT || '3001');
+
+function isLongRunningAiPath(path) {
+  if (!path) return false;
+  if (path.startsWith('/api/ai/')) return true;
+  return /^\/api\/chat\/sessions\/[^/]+\/reply(?:\?|$)/.test(path);
+}
 
 function uniq(values) {
   return [...new Set(values.filter(Boolean))];
@@ -49,9 +56,9 @@ function isRetryableNetworkError(error) {
   );
 }
 
-async function fetchWithTimeout(url, options) {
+async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -74,6 +81,7 @@ async function request(method, path, body = null, isMultipart = false) {
 
   const options = { method, headers };
   if (body) options.body = isMultipart ? body : JSON.stringify(body);
+  const timeoutMs = isLongRunningAiPath(path) ? AI_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
 
   const candidateUrls = uniq([BASE_URL, ...BASE_URL_CANDIDATES]);
   let lastNetworkError = null;
@@ -83,7 +91,7 @@ async function request(method, path, body = null, isMultipart = false) {
     let res;
 
     try {
-      res = await fetchWithTimeout(`${baseUrl}${path}`, options);
+      res = await fetchWithTimeout(`${baseUrl}${path}`, options, timeoutMs);
     } catch (error) {
       if (isRetryableNetworkError(error) && index < candidateUrls.length - 1) {
         lastNetworkError = error;
@@ -205,6 +213,10 @@ export const chatApi = {
   getMessages:   (id)             => api.get(`/api/chat/sessions/${id}/messages`),
   saveMessages:  (id, messages)   => api.post(`/api/chat/sessions/${id}/messages`, { messages }),
   askAssistant:  (id, content)    => api.post(`/api/chat/sessions/${id}/reply`, { content }),
+};
+
+export const aiApi = {
+  reply: (content, history = []) => api.post('/api/ai/reply', { content, history }),
 };
 
 // Admin functionality has been moved to the web dashboard (admin-dashboard/).

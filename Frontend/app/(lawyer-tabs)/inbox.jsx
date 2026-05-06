@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -12,251 +11,56 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { supabase } from '@/utils/supabase';
-import { messagingApi } from '@/services/messagingApi';
 import { useSocket } from '@/src/hooks/useSocket';
-import {
-  isAdminConversation,
-  hasAdminConversation,
-  sortConversationsWithAdminPin,
-  getInitials as getInitialsFromSorter,
-} from '@/utils/conversationSorter';
+import { ConversationCard } from '@/src/components/ConversationCard';
+import { messageService } from '@/src/services/messageService';
+import { messagingApi } from '@/services/messagingApi';
 
-function formatTimestamp(isoDate) {
-  if (!isoDate) return '';
-  const date = new Date(isoDate);
-  const now = new Date();
-  const isSameDay = date.toDateString() === now.toDateString();
-
-  if (isSameDay) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+function sortByLatest(conversations) {
+  return [...conversations].sort((a, b) => {
+    const aTime = new Date(a.last_message_at || a.created_at || 0).getTime();
+    const bTime = new Date(b.last_message_at || b.created_at || 0).getTime();
+    return bTime - aTime;
+  });
 }
 
-function normalizeBackendConversation(conversation) {
-  const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
-  const title = participant.name || participant.full_name || 'Conversation';
-
-  return {
-    ...conversation,
-    conversation_id: conversation.id,
-    source: 'backend',
-    other_participant_name: title,
-    other_participant_role: participant.role || 'citizen',
-    last_message: conversation.last_message?.content || conversation.last_message_preview || '',
-    last_message_at: conversation.last_message_at || conversation.created_at,
-    unread_count: Number(conversation.unread_count || 0),
-  };
-}
-
-function normalizeAdminConversation(conversation) {
-  const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
-  const title = participant.name || participant.full_name || conversation.other_participant_name || 'Conversation';
-
-  return {
-    ...conversation,
-    source: 'legacy',
-    conversation_id: conversation.conversation_id || conversation.id,
-    other_participant_name: title,
-    other_participant_role: participant.role || conversation.other_participant_role || 'participant',
-    last_message_at: conversation.last_message_at || conversation.created_at,
-    unread_count: Number(conversation.unread_count || 0),
-  };
-}
-
-function getConversationStableId(conversation) {
-  const rawId = conversation?.conversation_id || conversation?.id;
-  return rawId ? String(rawId) : '';
-}
-
-function resolveAdminTitle(item) {
-  if (item?.other_participant_name) {
-    return item.other_participant_name;
-  }
-
-  const otherRole = item?.other_participant_role || 'participant';
-  if (otherRole === 'admin') return 'Admin Team';
-  if (otherRole === 'user' || otherRole === 'citizen') return 'Client';
-  return 'Lawyer';
-}
-
-function resolvePreview(item, isTyping) {
-  if (isTyping) {
-    return 'Typing...';
-  }
-
-  if (!item) {
-    return 'No messages yet';
-  }
-
-  if (typeof item.last_message === 'string') {
-    return item.last_message.trim() || 'No messages yet';
-  }
-
-  return item.last_message_preview?.trim()
-    || item.last_message?.content?.trim()
-    || item.preview
-    || 'No messages yet';
-}
-
-function InboxRow({ item, title, avatarLabel, preview, isTyping, C, onPress, isAdminChat }) {
-  const unread = Number(item.unread_count || 0);
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.row,
-        { backgroundColor: C.card, borderColor: C.border },
-        isAdminChat && { borderLeftWidth: 4, borderLeftColor: '#D4A03C' },
-        pressed && { opacity: 0.82 },
-      ]}
-      onPress={onPress}
-    >
-      <View style={[styles.avatar, { backgroundColor: isAdminChat ? '#D4A03C' : C.accentLight }]}>
-        <Text style={[styles.avatarText, { color: isAdminChat ? '#FFF' : C.accent }]}>
-          {avatarLabel || getInitialsFromSorter(title)}
-        </Text>
-        {isAdminChat && (
-          <View style={styles.verifiedBadge}>
-            <Ionicons name="checkmark-done" size={10} color="#FFF" />
-          </View>
-        )}
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <View style={styles.rowTop}>
-          <View style={styles.titleWrapper}>
-            <Text style={[styles.title, { color: C.foreground }]} numberOfLines={1}>
-              {title}
-            </Text>
-            {isAdminChat && (
-              <View style={[styles.supportBadge, { backgroundColor: '#D4A03C' }]}>
-                <Text style={styles.supportBadgeText}>Support</Text>
-              </View>
-            )}
-          </View>
-          <Text style={[styles.time, { color: C.mutedForeground }]}>
-            {formatTimestamp(item.last_message_at || item.updated_at || item.created_at)}
-          </Text>
-        </View>
-
-        <View style={styles.rowBottom}>
-          <Text
-            style={[
-              styles.preview,
-              { color: isTyping ? C.accent : C.textSecondary },
-              isTyping && styles.typingPreview,
-            ]}
-            numberOfLines={1}
-          >
-            {preview}
-          </Text>
-
-          {unread > 0 && (
-            <View style={[styles.badge, { backgroundColor: C.accent }]}>
-              <Text style={styles.badgeText}>{unread > 99 ? '99+' : unread}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </Pressable>
-  );
+function isAdminConversation(conversation) {
+  const participant = conversation?.other_participant || {};
+  const role = String(participant.role || '').toLowerCase();
+  return role === 'admin';
 }
 
 export default function LawyerInboxPage() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const C = useTheme();
   const { t } = useLanguage();
   const {
-    conversations: backendConversations,
+    conversations,
     refreshConversations,
-    typingByConversation: backendTypingByConversation,
+    connectionStatus,
+    onlineUsers,
+    lastError,
   } = useSocket();
 
-  const [adminRows, setAdminRows] = useState([]);
-  const [combinedLoading, setCombinedLoading] = useState(true);
-  const [combinedRefreshing, setCombinedRefreshing] = useState(false);
-  const [legacyTypingByConversation, setLegacyTypingByConversation] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
   const [startingAdminChat, setStartingAdminChat] = useState(false);
-  const typingTimeoutsRef = useRef({});
-  const refreshTimeoutRef = useRef(null);
-  const loadVersionRef = useRef(0);
 
-  // Normalize backend conversations
-  const backendRows = useMemo(
-    () => backendConversations
-      .map(normalizeBackendConversation)
-      .filter(conv => {
-        // Exclude admin conversations from backend (only get them from legacy API)
-        const role = conv.other_participant_role || 'unknown';
-        return role !== 'admin';
-      }),
-    [backendConversations]
+  const rows = useMemo(() => sortByLatest(conversations), [conversations]);
+  const adminConversation = useMemo(
+    () => rows.find((item) => isAdminConversation(item)) || null,
+    [rows]
+  );
+  const totalUnread = useMemo(
+    () => rows.reduce((sum, item) => sum + Number(item.unread_count || 0), 0),
+    [rows]
   );
 
-  // Combine all conversations from both sources
-  const allConversations = useMemo(() => {
-    const combined = [...adminRows, ...backendRows];
-    
-    // Deduplicate - prioritize legacy admin, then by conversation_id
-    const adminConvs = combined.filter(isAdminConversation);
-    const clientConvs = combined.filter(conv => !isAdminConversation(conv));
-    
-    // Keep only ONE admin conversation (the first one from legacy)
-    const adminToKeep = adminConvs.length > 0 ? [adminConvs[0]] : [];
-    
-    // Deduplicate client conversations by ID
-    const clientSeen = new Set();
-    const deduplicatedClients = clientConvs.filter(conv => {
-      const id = getConversationStableId(conv);
-      if (!id) return false;
-      if (clientSeen.has(id)) return false;
-      clientSeen.add(id);
-      return true;
-    });
-    
-    const globallyUnique = [];
-    const globalSeen = new Set();
-
-    for (const conv of [...adminToKeep, ...deduplicatedClients]) {
-      const id = getConversationStableId(conv);
-      if (!id || globalSeen.has(id)) continue;
-      globalSeen.add(id);
-      globallyUnique.push(conv);
-    }
-
-    return globallyUnique;
-  }, [adminRows, backendRows]);
-
-  // Sort with admin pinned to top
-  const sortedRows = useMemo(() => {
-    return sortConversationsWithAdminPin(allConversations);
-  }, [allConversations]);
-
-  // Check if admin conversation exists
-  const adminConvExists = useMemo(() => {
-    return hasAdminConversation(allConversations);
-  }, [allConversations]);
-
-  // Total unread count
-  const unreadTotal = useMemo(
-    () => sortedRows.reduce((sum, row) => sum + Number(row.unread_count || 0), 0),
-    [sortedRows]
-  );
-
-  // Combine typing indicators
-  const allTypingByConversation = useMemo(() => {
-    return { ...legacyTypingByConversation, ...backendTypingByConversation };
-  }, [legacyTypingByConversation, backendTypingByConversation]);
-
-  const openBackendConversation = useCallback((conversation) => {
-    const participant = conversation.other_participant || {};
+  const openConversation = useCallback((conversation) => {
+    const participant = conversation.other_participant || conversation.citizen || conversation.lawyer || {};
     router.push({
       pathname: '/(messaging)/chat',
       params: {
@@ -266,285 +70,150 @@ export default function LawyerInboxPage() {
     });
   }, []);
 
-  const openLegacyConversation = useCallback((conversationId, title) => {
-    router.push({
-      pathname: '/(lawyer-tabs)/inbox-chat',
-      params: {
-        conversationId,
-        title,
-      },
-    });
-  }, []);
-
-  // Load both admin and backend conversations simultaneously
-  const loadAllConversations = useCallback(async (isRefresh = false) => {
-    if (!user?.id) return;
-    const loadVersion = ++loadVersionRef.current;
-
-    if (isRefresh) setCombinedRefreshing(true);
-    else setCombinedLoading(true);
+  const loadConversations = useCallback(async ({ isRefresh = false } = {}) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
     try {
-      // Load both in parallel
-      const [adminPayload, backendSuccess] = await Promise.all([
-        messagingApi.listConversations('admin_lawyer').catch((err) => {
-          console.error('Admin load error:', err);
-          return { conversations: [] };
-        }),
-        refreshConversations().catch((err) => {
-          console.error('Backend load error:', err);
-          return false;
-        }),
-      ]);
-
-      if (loadVersion !== loadVersionRef.current) return;
-
-      // Update admin rows
-      const adminConvs = Array.isArray(adminPayload?.conversations)
-        ? adminPayload.conversations
-          .map(normalizeAdminConversation)
-          .filter(isAdminConversation)
-        : [];
-      setAdminRows(adminConvs);
-    } catch (error) {
-      console.error('Combined inbox load error:', error);
-      Alert.alert('Messaging', error?.message || 'Failed to load conversations');
+      setError(null);
+      await refreshConversations();
+    } catch (err) {
+      setError(err?.message || 'Failed to load conversations');
     } finally {
-      if (loadVersion === loadVersionRef.current) {
-        setCombinedLoading(false);
-        setCombinedRefreshing(false);
-      }
+      setLoading(false);
+      setRefreshing(false);
     }
-  }, [refreshConversations, user?.id]);
+  }, [refreshConversations]);
 
-  // Initial load and setup listeners
   useEffect(() => {
-    if (!user?.id) return;
-
-    loadAllConversations(false);
-
-    const scheduleRefresh = () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-
-      refreshTimeoutRef.current = setTimeout(() => {
-        loadAllConversations(false).catch(() => {});
-      }, 220);
-    };
-
-    // Listen for new messages
-    const dataChannel = supabase
-      .channel(`lawyer-inbox-sync-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-        scheduleRefresh();
-      })
-      .subscribe();
-
-    // Listen for typing indicators
-    const typingChannel = supabase
-      .channel('typing-indicators')
-      .on('broadcast', { event: 'typing' }, ({ payload }) => {
-        const conversationId = String(payload?.conversation_id || '');
-        const senderId = String(payload?.sender_id || '');
-        const isTyping = Boolean(payload?.is_typing);
-
-        if (!conversationId || !senderId || senderId === user.id) return;
-
-        setLegacyTypingByConversation((prev) => ({
-          ...prev,
-          [conversationId]: isTyping,
-        }));
-
-        if (typingTimeoutsRef.current[conversationId]) {
-          clearTimeout(typingTimeoutsRef.current[conversationId]);
-        }
-
-        if (isTyping) {
-          typingTimeoutsRef.current[conversationId] = setTimeout(() => {
-            setLegacyTypingByConversation((prev) => ({ ...prev, [conversationId]: false }));
-          }, 3500);
-        }
-      })
-      .subscribe();
-
-    // Periodic refresh
-    const intervalId = setInterval(() => {
-      loadAllConversations(false).catch(() => {});
-    }, 8000);
-
-    return () => {
-      Object.values(typingTimeoutsRef.current).forEach((timeoutId) => clearTimeout(timeoutId));
-      typingTimeoutsRef.current = {};
-      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
-      supabase.removeChannel(dataChannel);
-      supabase.removeChannel(typingChannel);
-      clearInterval(intervalId);
-    };
-  }, [loadAllConversations, user?.id]);
+    loadConversations();
+  }, [loadConversations]);
 
   const startAdminConversation = useCallback(async () => {
     if (startingAdminChat) return;
     setStartingAdminChat(true);
+    setError(null);
 
     try {
-      // Check for existing admin conversation
-      const existingPayload = await messagingApi.listConversations('admin_lawyer');
-      const conversations = Array.isArray(existingPayload?.conversations)
-        ? existingPayload.conversations
-          .map(normalizeAdminConversation)
-          .filter(isAdminConversation)
-        : [];
-
-      const existing = conversations[0];
-      const existingId = getConversationStableId(existing);
-
-      if (existingId) {
-        openLegacyConversation(existingId, 'Admin Team');
+      if (adminConversation) {
+        openConversation(adminConversation);
         return;
       }
 
-      // Create new admin conversation
       const adminUser = await messagingApi.getFirstAdminUser();
-      const createPayload = await messagingApi.createConversation('admin_lawyer', adminUser.id);
-      const conversationId = createPayload?.conversation?.id || createPayload?.id;
+      const payload = await messageService.startConversation({ participantId: adminUser.id });
+      const conversation = payload?.conversation || null;
+      const conversationId = conversation?.id || payload?.conversationId || payload?.id;
 
       if (!conversationId) {
         throw new Error('Could not start admin conversation');
       }
 
-      await loadAllConversations(false);
-      openLegacyConversation(conversationId, 'Admin Team');
-    } catch (error) {
-      Alert.alert('Messaging', error?.message || 'Failed to start admin chat');
+      await refreshConversations();
+      openConversation(
+        conversation || {
+          id: conversationId,
+          other_participant: { name: 'Admin Team' },
+        }
+      );
+    } catch (err) {
+      setError(err?.message || 'Failed to start admin chat');
     } finally {
       setStartingAdminChat(false);
     }
-  }, [loadAllConversations, openLegacyConversation, startingAdminChat]);
-
-  const renderItem = useCallback(({ item }) => {
-    const conversationId = getConversationStableId(item);
-    const isAdmin = isAdminConversation(item);
-    let title = '';
-    let avatarLabel = '';
-
-    if (item.source === 'backend') {
-      // Backend conversation (client chat)
-      const participant = item.other_participant || {};
-      title = participant.name || participant.full_name || 'Conversation';
-      avatarLabel = participant.initials || getInitialsFromSorter(title);
-
-      return (
-        <InboxRow
-          item={item}
-          title={title}
-          avatarLabel={avatarLabel}
-          preview={resolvePreview(item, Boolean(backendTypingByConversation[conversationId]))}
-          isTyping={Boolean(backendTypingByConversation[conversationId])}
-          C={C}
-          isAdminChat={false}
-          onPress={() => openBackendConversation(item)}
-        />
-      );
-    }
-
-    // Legacy admin conversation
-    title = resolveAdminTitle(item);
-    avatarLabel = getInitialsFromSorter(title);
-
-    return (
-      <InboxRow
-        item={item}
-        title={title}
-        avatarLabel={avatarLabel}
-        preview={resolvePreview(item, Boolean(legacyTypingByConversation[conversationId]))}
-        isTyping={Boolean(legacyTypingByConversation[conversationId])}
-        C={C}
-        isAdminChat={isAdmin}
-        onPress={() => openLegacyConversation(conversationId, title)}
-      />
-    );
-  }, [
-    C,
-    backendTypingByConversation,
-    legacyTypingByConversation,
-    openBackendConversation,
-    openLegacyConversation,
-  ]);
+  }, [adminConversation, openConversation, refreshConversations, startingAdminChat]);
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: C.border, backgroundColor: C.headerBg }]}>
         <View style={styles.headerTop}>
-          <Text style={[styles.heading, { color: C.tint }]}>{t.inbox || 'Inbox'}</Text>
-          {unreadTotal > 0 && (
-            <View style={[styles.totalBadge, { backgroundColor: C.accentLight }]}>
-              <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} unread</Text>
+          <View>
+            <Text style={[styles.kicker, { color: C.mutedForeground }]}>{t.inbox || 'Inbox'}</Text>
+            <Text style={[styles.title, { color: C.foreground }]}>Messages</Text>
+          </View>
+          <View style={[styles.statusPill, { backgroundColor: connectionStatus === 'connected' ? 'rgba(22,163,74,0.12)' : 'rgba(245,158,11,0.12)' }]}>
+            <View style={[styles.statusDot, { backgroundColor: connectionStatus === 'connected' ? C.success : C.warning }]} />
+            <Text style={[styles.statusText, { color: connectionStatus === 'connected' ? C.success : C.warning }]}>
+              {connectionStatus === 'connected' ? 'Live' : 'Connecting'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <Text style={[styles.summaryText, { color: C.mutedForeground }]}>
+            Lawyer inbox
+          </Text>
+          {totalUnread > 0 && (
+            <View style={[styles.unreadPill, { backgroundColor: C.tint }]}>
+              <Text style={[styles.unreadPillText, { color: C.primaryForeground }]}>
+                {totalUnread} unread
+              </Text>
             </View>
           )}
         </View>
 
-        {!adminConvExists && (
+        {!adminConversation && (
           <Pressable
             style={({ pressed }) => [
-              styles.startAdminBtn,
+              styles.adminBtn,
               { backgroundColor: C.tint },
-              (pressed || startingAdminChat) && { opacity: 0.82 },
+              (pressed || startingAdminChat) && { opacity: 0.84 },
             ]}
             onPress={startAdminConversation}
             disabled={startingAdminChat}
           >
             {startingAdminChat ? (
-              <ActivityIndicator color={C.primaryForeground} size="small" />
+              <ActivityIndicator size="small" color={C.primaryForeground} />
             ) : (
-              <Ionicons name="paper-plane-outline" size={16} color={C.primaryForeground} />
+              <Ionicons name="chatbubble-ellipses-outline" size={16} color={C.primaryForeground} />
             )}
-            <Text style={[styles.startAdminBtnText, { color: C.primaryForeground }]}>Start Admin Chat</Text>
+            <Text style={[styles.adminBtnText, { color: C.primaryForeground }]}>Start Admin Chat</Text>
           </Pressable>
+        )}
+
+        {error && (
+          <Text style={[styles.errorText, { color: C.destructive }]} numberOfLines={2}>
+            {error}
+          </Text>
         )}
       </View>
 
-      {/* Content */}
-      {combinedLoading ? (
+      {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={C.accent} size="large" />
+          <ActivityIndicator color={C.tint} size="large" />
         </View>
-      ) : sortedRows.length === 0 ? (
+      ) : (
         <FlatList
-          data={[]}
-          keyExtractor={(item, index) => getConversationStableId(item) || `empty-${index}`}
-          contentContainerStyle={styles.emptyContent}
+          data={rows}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={rows.length ? styles.listContent : styles.emptyContent}
+          renderItem={({ item }) => (
+            <ConversationCard
+              conversation={item}
+              theme={C}
+              online={Boolean(onlineUsers[String(item.other_participant?.id || '')])}
+              onPress={() => openConversation(item)}
+            />
+          )}
           refreshControl={
             <RefreshControl
-              refreshing={combinedRefreshing}
-              onRefresh={() => loadAllConversations(true)}
-              tintColor={C.accent}
+              refreshing={refreshing}
+              onRefresh={() => loadConversations({ isRefresh: true })}
+              tintColor={C.tint}
             />
           }
           ListEmptyComponent={
             <View style={styles.center}>
-              <Ionicons name="chatbubble-ellipses-outline" size={44} color={C.mutedForeground} />
+              <Ionicons name="chatbubble-ellipses-outline" size={42} color={C.mutedForeground} />
               <Text style={[styles.emptyTitle, { color: C.foreground }]}>No conversations yet</Text>
-              <Text style={[styles.emptyText, { color: C.textSecondary }]}>
-                Your messages will appear here. Start chatting with support or awaiting client inquiries.
+              <Text style={[styles.emptySubtitle, { color: C.mutedForeground }]}>
+                Start messaging a client from Cases, or open admin support chat.
               </Text>
             </View>
           }
-        />
-      ) : (
-        <FlatList
-          data={sortedRows}
-          keyExtractor={(item, index) => getConversationStableId(item) || `conversation-${index}`}
-          renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={combinedRefreshing}
-              onRefresh={() => loadAllConversations(true)}
-              tintColor={C.accent}
-            />
-          }
+          ListFooterComponent={lastError ? (
+            <Text style={[styles.footerError, { color: C.destructive }]}>{lastError}</Text>
+          ) : null}
         />
       )}
     </View>
@@ -552,178 +221,118 @@ export default function LawyerInboxPage() {
 }
 
 const styles = StyleSheet.create({
-  // ── Container & Layout ──
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
   },
   headerTop: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  heading: {
-    fontSize: 28,
-    fontFamily: 'Inter_700Bold',
-    letterSpacing: -0.5,
-  },
-
-  // ── Total Badge ──
-  totalBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  totalBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-  },
-
-  // ── Start Admin Button ──
-  startAdminBtn: {
-    marginTop: 10,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  startAdminBtnText: {
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-  },
-
-  // ── Conversations List ──
-  listContent: {
-    padding: 16,
-    gap: 10,
-  },
-  emptyContent: {
-    flexGrow: 1,
-  },
-
-  // ── Conversation Row ──
-  row: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 12,
   },
-
-  // ── Avatar ──
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  avatarText: {
-    fontSize: 18,
-    fontFamily: 'Inter_700Bold',
-  },
-  verifiedBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFF',
-  },
-
-  // ── Row Content ──
-  rowTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  kicker: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: 4,
-    gap: 8,
   },
-  titleWrapper: {
-    flex: 1,
+  title: {
+    fontSize: 30,
+    fontFamily: 'PlayfairDisplay_700Bold',
+  },
+  statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 4,
   },
-  title: {
-    fontSize: 15,
-    fontFamily: 'Inter_600SemiBold',
-    flex: 1,
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  supportBadge: {
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  supportBadgeText: {
-    fontSize: 10,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#FFF',
-  },
-  time: {
+  statusText: {
     fontSize: 12,
-    fontFamily: 'Inter_400Regular',
+    fontFamily: 'Inter_600SemiBold',
   },
-
-  // ── Preview & Unread ──
-  rowBottom: {
+  summaryRow: {
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
   },
-  preview: {
-    flex: 1,
+  summaryText: {
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
   },
-  typingPreview: {
-    fontFamily: 'Inter_600SemiBold',
-    fontStyle: 'italic',
+  unreadPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  badge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+  unreadPillText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  adminBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    gap: 8,
   },
-  badgeText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontFamily: 'Inter_700Bold',
+  adminBtnText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
   },
-
-  // ── Empty State ──
+  errorText: {
+    marginTop: 10,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+  },
+  listContent: {
+    padding: 20,
+    gap: 12,
+    paddingBottom: 100,
+  },
+  emptyContent: {
+    flexGrow: 1,
+    padding: 20,
+  },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    gap: 10,
   },
   emptyTitle: {
-    marginTop: 10,
-    fontSize: 17,
-    fontFamily: 'Inter_600SemiBold',
+    marginTop: 4,
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
   },
-  emptyText: {
-    marginTop: 6,
+  emptySubtitle: {
+    textAlign: 'center',
     fontSize: 13,
     fontFamily: 'Inter_400Regular',
+    lineHeight: 20,
+  },
+  footerError: {
+    marginTop: 12,
     textAlign: 'center',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
   },
 });

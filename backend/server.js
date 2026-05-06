@@ -18,6 +18,7 @@ import adminRoutes from './routes/admin.js';
 import chatRoutes from './routes/chat.js';
 import conversationsRoutes from './routes/conversations.js';
 import notificationsRoutes from './routes/notifications.js';
+import aiRoutes from './routes/ai.js';
 import { initializeSocket } from './socket/socketHandler.js';
 
 // Import database
@@ -94,6 +95,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

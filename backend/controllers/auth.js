@@ -18,11 +18,24 @@ function toSupabaseSessionPayload(session) {
     token_type: session.token_type,
     user: session.user
       ? {
-          id: session.user.id,
-          email: session.user.email,
-        }
+        id: session.user.id,
+        email: session.user.email,
+      }
       : null,
   };
+}
+
+function getAccountAccessError(user) {
+  if (!user) return 'Invalid token';
+  if (user.status === 'suspended') return 'Account suspended';
+  if (user.status === 'rejected') return 'Account rejected';
+  if (user.status === 'pending') {
+    return user.role === 'lawyer' ? 'Account pending verification' : 'Account pending approval';
+  }
+  if (user.role === 'lawyer' && !user.is_verified) {
+    return 'Account pending verification';
+  }
+  return null;
 }
 
 export async function register(req, res) {
@@ -61,17 +74,22 @@ export async function register(req, res) {
       );
     }
 
+    let bridgeResult = null;
     const bridgePassword = role === 'lawyer' ? undefined : password;
-    const bridgeResult = await ensureSupabaseMessagingIdentity({
-      publicUserId: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.full_name,
-      password: bridgePassword,
-      db: client,
-    });
-    if (bridgeResult?.createdAuthUser) {
-      authUserForCleanup = bridgeResult.authUserId;
+    try {
+      bridgeResult = await ensureSupabaseMessagingIdentity({
+        publicUserId: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.full_name,
+        password: bridgePassword,
+        db: client,
+      });
+      if (bridgeResult?.createdAuthUser) {
+        authUserForCleanup = bridgeResult.authUserId;
+      }
+    } catch (bridgeError) {
+      console.error('Supabase identity bridge warning during register:', bridgeError.message);
     }
 
     await client.query('COMMIT');
@@ -83,19 +101,59 @@ export async function register(req, res) {
         const adminResult = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
         if (adminResult.rows.length > 0) {
           const adminId = adminResult.rows[0].id;
-          const convResult = await pool.query(
-            `INSERT INTO conversations (citizen_id, lawyer_id, type)
-             VALUES ($1, $2, 'admin_lawyer')
-             ON CONFLICT (citizen_id, lawyer_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-             RETURNING id`,
-            [adminId, user.id]
+          const typeColumnCheck = await pool.query(
+            `SELECT 1
+             FROM information_schema.columns
+             WHERE table_schema = 'public'
+               AND table_name = 'conversations'
+               AND column_name = 'type'
+             LIMIT 1`
           );
-          const convId = convResult.rows[0].id;
-          await pool.query(
-            `INSERT INTO messages (conversation_id, sender_id, content)
+          const hasTypeCol = typeColumnCheck.rows.length > 0;
+
+          const convInsertResult = hasTypeCol
+            ? await pool.query(
+              `INSERT INTO conversations (citizen_id, lawyer_id, type)
+               VALUES ($1, $2, 'admin_lawyer')
+               ON CONFLICT DO NOTHING
+               RETURNING id`,
+              [adminId, user.id]
+            )
+            : await pool.query(
+              `INSERT INTO conversations (citizen_id, lawyer_id)
+               VALUES ($1, $2)
+               ON CONFLICT (citizen_id, lawyer_id) DO NOTHING
+               RETURNING id`,
+              [adminId, user.id]
+            );
+
+          let convId = convInsertResult.rows[0]?.id || null;
+          if (!convId) {
+            const existingConvResult = hasTypeCol
+              ? await pool.query(
+                `SELECT id
+                 FROM conversations
+                 WHERE citizen_id = $1 AND lawyer_id = $2 AND type = 'admin_lawyer'
+                 LIMIT 1`,
+                [adminId, user.id]
+              )
+              : await pool.query(
+                `SELECT id
+                 FROM conversations
+                 WHERE citizen_id = $1 AND lawyer_id = $2
+                 LIMIT 1`,
+                [adminId, user.id]
+              );
+            convId = existingConvResult.rows[0]?.id || null;
+          }
+
+          if (convId) {
+            await pool.query(
+              `INSERT INTO messages (conversation_id, sender_id, content)
              VALUES ($1, $2, $3)`,
-            [convId, adminId, 'Welcome to the team! If you have any questions just send a message.']
-          );
+              [convId, adminId, 'Welcome to the team! If you have any questions just send a message.']
+            );
+          }
         }
       } catch (msgError) {
         console.error('Failed to send welcome message:', msgError);
@@ -109,6 +167,9 @@ export async function register(req, res) {
     };
 
     if (shouldIssueToken) {
+      if (!bridgeResult?.session) {
+        return res.status(500).json({ error: 'Failed to establish Supabase messaging session. Please try again.' });
+      }
       response.token = jwt.sign(
         { userId: user.id, role: user.role },
         process.env.JWT_SECRET,
@@ -198,13 +259,23 @@ export async function login(req, res) {
       return res.status(403).json({ error: 'Account pending verification' });
     }
 
-    const bridgeResult = await ensureSupabaseMessagingIdentity({
-      publicUserId: user.id,
-      email: user.email,
-      role: user.role,
-      fullName: user.full_name,
-      password,
-    });
+    let bridgeSession = null;
+    try {
+      const bridgeResult = await ensureSupabaseMessagingIdentity({
+        publicUserId: user.id,
+        email: user.email,
+        role: user.role,
+        fullName: user.full_name,
+        password,
+      });
+      bridgeSession = bridgeResult?.session || null;
+    } catch (bridgeError) {
+      console.error('Supabase identity bridge warning during login:', bridgeError.message);
+    }
+
+    if (!bridgeSession) {
+      return res.status(500).json({ error: 'Failed to establish Supabase messaging session. Please try again.' });
+    }
 
     const token = jwt.sign(
       { userId: user.id, role: user.role },
@@ -222,7 +293,7 @@ export async function login(req, res) {
         profile_photo_url: user.profile_photo_url || null,
       },
       token,
-      supabaseSession: toSupabaseSessionPayload(bridgeResult.session),
+      supabaseSession: toSupabaseSessionPayload(bridgeSession),
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -240,7 +311,9 @@ export async function verifyToken(req, res) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const userResult = await pool.query(
-      'SELECT id, email, full_name AS name, role, profile_photo_url FROM users WHERE id = $1',
+      `SELECT id, email, full_name AS name, role, status, is_verified, profile_photo_url
+       FROM users
+       WHERE id = $1`,
       [decoded.userId]
     );
 
@@ -248,7 +321,21 @@ export async function verifyToken(req, res) {
       return res.status(403).json({ error: 'Invalid token' });
     }
 
-    res.json({ user: userResult.rows[0] });
+    const user = userResult.rows[0];
+    const accountError = getAccountAccessError(user);
+    if (accountError) {
+      return res.status(403).json({ error: accountError });
+    }
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profile_photo_url: user.profile_photo_url || null,
+      },
+    });
   } catch {
     res.status(403).json({ error: 'Invalid token' });
   }

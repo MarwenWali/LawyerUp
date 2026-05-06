@@ -89,8 +89,8 @@ export default function UserDashboard() {
   };
 
   const quickActions = [
-    { icon: 'chatbubble-ellipses', label: t.aiAssistant, color: C.accent, bg: C.accentLight, route: '/(user-tabs)/chat' },
     { icon: 'people', label: t.findLawyer, color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: '/(user-tabs)/lawyers' },
+    { icon: 'chatbubbles-outline', label: t.messages || 'Messages', color: C.accent, bg: C.accentLight, route: '/(messaging)/conversations' },
   ];
 
   const recentCases = [...cases]
@@ -141,16 +141,6 @@ export default function UserDashboard() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.heroTitle, { color: isDark ? '#0B1120' : '#FDF6E3' }]}>{t.heroCardTitle}</Text>
                 <Text style={[styles.heroDesc, { color: isDark ? 'rgba(11,17,32,0.6)' : 'rgba(253,246,227,0.7)' }]}>{t.heroCardDesc}</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.heroBtn, { backgroundColor: isDark ? '#0B1120' : C.accent }, pressed && { opacity: 0.85 }]}
-                  onPress={() => {
-                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    router.push('/(user-tabs)/chat');
-                  }}
-                >
-                  <Ionicons name="chatbubble" size={16} color={isDark ? C.accent : '#14213D'} />
-                  <Text style={[styles.heroBtnText, { color: isDark ? C.accent : '#14213D' }]}>{t.startConversation}</Text>
-                </Pressable>
               </View>
             </View>
           </LinearGradient>
@@ -177,25 +167,6 @@ export default function UserDashboard() {
               </Pressable>
             ))}
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.messagesCard,
-              { backgroundColor: C.card, borderColor: C.border },
-              pressed && { opacity: 0.9 },
-            ]}
-            onPress={() => router.push('/(messaging)/conversations')}
-          >
-            <View style={[styles.messagesIcon, { backgroundColor: C.accentLight }]}>
-              <Ionicons name="chatbubbles-outline" size={24} color={C.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.messagesTitle, { color: C.foreground }]}>Messages</Text>
-              <Text style={[styles.messagesSubtitle, { color: C.mutedForeground }]}>
-                Open secure chats with lawyers
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={C.mutedForeground} />
-          </Pressable>
         </View>
 
         {/* ── Specialization chips ── */}
