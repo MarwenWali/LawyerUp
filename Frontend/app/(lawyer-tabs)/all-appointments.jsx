@@ -1,29 +1,38 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { useTheme } from '@/constants/useTheme';
-import { userApi } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/utils/supabase';
 import CreateAppointmentModal from '@/components/CreateAppointmentModal';
-import { useFocusEffect } from 'expo-router';
 
-export default function AppointmentsScreen() {
+export default function LawyerAppointmentsScreen() {
   const C = useTheme();
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
 
   const fetchAppointments = useCallback(async () => {
+    if (!user?.id) return;
     try {
       setLoading(true);
-      const data = await userApi.getAppointments();
-      setAppointments(data.appointments || []);
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('lawyer_id', user.id)
+        .gte('date', new Date().toISOString())
+        .order('date', { ascending: true });
+        
+      if (!error && data) {
+        setAppointments(data);
+      }
     } catch (e) {
       console.error('fetchAppointments error', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,17 +45,11 @@ export default function AppointmentsScreen() {
       <Stack.Screen options={{
         title: 'My Appointments',
         headerRight: () => (
-          <Pressable onPress={() => setModalVisible(true)} style={{ padding: 8 }}>
+          <Pressable onPress={() => router.push('/(lawyer-tabs)/create-appointment')} style={{ padding: 8 }}>
             <Ionicons name="add" size={26} color={C.tint} />
           </Pressable>
         )
       }} />
-
-      <CreateAppointmentModal 
-        visible={modalVisible} 
-        onClose={() => setModalVisible(false)} 
-        onSuccess={fetchAppointments} 
-      />
 
       {loading ? (
         <View style={styles.center}>
@@ -60,23 +63,23 @@ export default function AppointmentsScreen() {
       ) : (
         <FlatList
           data={appointments}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           contentContainerStyle={{ padding: 20, paddingBottom: 100, gap: 12 }}
           renderItem={({ item }) => {
             const dateObj = new Date(item.date);
-            const isLawyer = item.type === 'lawyer';
+            const isCitizen = item.type === 'lawyer' || item.type === 'user' || item.type === 'client';
             const isCourt = item.type === 'court';
             
             return (
               <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                  <View style={[styles.iconBox, { backgroundColor: isLawyer ? 'rgba(59,130,246,0.1)' : isCourt ? 'rgba(184, 135, 47, 0.1)' : 'rgba(16,185,129,0.1)' }]}>
-                    <Ionicons name={isLawyer ? 'briefcase' : isCourt ? 'business' : 'calendar'} size={24} color={isLawyer ? '#3B82F6' : isCourt ? '#B8872F' : '#10B981'} />
+                  <View style={[styles.iconBox, { backgroundColor: isCitizen ? 'rgba(59,130,246,0.1)' : isCourt ? 'rgba(184, 135, 47, 0.1)' : 'rgba(16,185,129,0.1)' }]}>
+                    <Ionicons name={isCitizen ? 'people' : isCourt ? 'business' : 'calendar'} size={24} color={isCitizen ? '#3B82F6' : isCourt ? '#B8872F' : '#10B981'} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.title, { color: C.foreground }]} numberOfLines={1}>{item.title}</Text>
                     <Text style={[styles.subtitle, { color: C.mutedForeground }]}>
-                      {isLawyer && item.lawyer_name ? item.lawyer_name : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                      {isCitizen ? 'Citizen Appointment' : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}
                     </Text>
                   </View>
                 </View>

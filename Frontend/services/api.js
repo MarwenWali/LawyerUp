@@ -90,6 +90,7 @@ export const lawyersApi = {
   getById: (id) => api.get(`/api/lawyers/${id}`),
   updateProfile: (data) => api.put('/api/lawyers/profile', data),
   setAvailability: (isAvailable) => api.patch('/api/lawyers/availability', { isAvailable }),
+  createAppointment: (data) => api.post('/api/lawyers/appointments', data),
 };
 
 // ── Cases ────────────────────────────────────────────────────────────────────

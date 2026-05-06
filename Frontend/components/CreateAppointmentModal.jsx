@@ -1,76 +1,97 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, Pressable, StyleSheet, TextInput, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, Modal, Pressable, StyleSheet, TextInput, ScrollView, Platform, ActivityIndicator, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/constants/useTheme';
-import { userApi } from '@/services/api';
+import { userApi, lawyersApi } from '@/services/api';
 import { messagingApi } from '@/services/messagingApi';
 import { router } from 'expo-router';
+import { supabase } from '@/utils/supabase';
 
-export default function CreateAppointmentModal({ visible, onClose, onSuccess }) {
+export default function CreateAppointmentModal({ visible, onClose, onSuccess, isLawyer = false, currentUser = null }) {
   const C = useTheme();
   
-  const [step, setStep] = useState(1); // 1: type, 2: details
-  const [type, setType] = useState('lawyer'); // lawyer, court, other
+  const [step, setStep] = useState(1);
+  const [type, setType] = useState(isLawyer ? 'client' : 'lawyer');
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
-  const [lawyerId, setLawyerId] = useState(null);
+  const [participantId, setParticipantId] = useState(null);
   
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   
-  const [lawyers, setLawyers] = useState([]);
-  const [loadingLawyers, setLoadingLawyers] = useState(false);
+  const [participants, setParticipants] = useState([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (visible && type === 'lawyer' && lawyers.length === 0) {
-      fetchLawyers();
+    if (visible && (type === 'lawyer' || type === 'client') && participants.length === 0) {
+      fetchParticipants();
     }
   }, [visible, type]);
 
-  const fetchLawyers = async () => {
-    setLoadingLawyers(true);
+  const fetchParticipants = async () => {
+    setLoadingParticipants(true);
     try {
-      const payload = await messagingApi.listConversations('lawyer_user');
+      const payload = await messagingApi.listConversations();
       const conversations = Array.isArray(payload?.conversations) ? payload.conversations : [];
-      const extractedLawyers = conversations
+      const extractedParticipants = conversations
         .filter(c => c.other_participant?.role !== 'admin')
         .map(c => ({
           id: c.other_participant?.id,
-          name: c.other_participant?.full_name || c.other_participant?.name || 'Unknown Lawyer'
+          name: c.other_participant?.full_name || c.other_participant?.name || 'Unknown'
         }));
-      setLawyers(extractedLawyers);
+      setParticipants(extractedParticipants);
     } catch (e) {
       console.error(e);
     }
-    setLoadingLawyers(false);
+    setLoadingParticipants(false);
   };
 
   const handleSave = async () => {
     try {
       setSubmitting(true);
       let finalTitle = title;
+      
+      if ((type === 'lawyer' || type === 'client') && !participantId) {
+        Alert.alert('Missing Selection', `Please select a ${type} for the appointment.`);
+        setSubmitting(false);
+        return;
+      }
+
+      const selectedParticipant = participants.find(p => p.id === participantId);
+      
       if (type === 'lawyer') {
-        const selectedLawyer = lawyers.find(l => l.id === lawyerId);
-        finalTitle = selectedLawyer ? `Meeting with ${selectedLawyer.name}` : 'Lawyer Appointment';
+        finalTitle = selectedParticipant ? `Meeting with ${selectedParticipant.name}` : 'Lawyer Appointment';
+      } else if (type === 'client') {
+        finalTitle = selectedParticipant ? `Meeting with ${selectedParticipant.name}` : 'Client Appointment';
       } else if (type === 'court') {
         finalTitle = 'Court Appointment';
       }
       
-      await userApi.createAppointment({
-        title: finalTitle,
-        type,
-        date: date.toISOString(),
-        location: type === 'court' ? location : null,
-        lawyer_id: type === 'lawyer' ? lawyerId : null
-      });
+      if (isLawyer) {
+        await lawyersApi.createAppointment({
+          title: finalTitle,
+          type: type === 'client' ? 'lawyer' : type,
+          date: date.toISOString(),
+          location: type === 'court' ? location : null,
+          user_id: type === 'client' ? participantId : null
+        });
+      } else {
+        await userApi.createAppointment({
+          title: finalTitle,
+          type,
+          date: date.toISOString(),
+          location: type === 'court' ? location : null,
+          lawyer_id: type === 'lawyer' ? participantId : null
+        });
+      }
       
       onSuccess();
       onClose();
       reset();
-      router.push('/(user-tabs)/appointments');
+      router.push(isLawyer ? '/(lawyer-tabs)/all-appointments' : '/(user-tabs)/appointments');
     } catch (e) {
       console.error(e);
     } finally {
@@ -80,10 +101,10 @@ export default function CreateAppointmentModal({ visible, onClose, onSuccess }) 
 
   const reset = () => {
     setStep(1);
-    setType('lawyer');
+    setType(isLawyer ? 'client' : 'lawyer');
     setTitle('');
     setLocation('');
-    setLawyerId(null);
+    setParticipantId(null);
     setDate(new Date());
   };
 
@@ -109,10 +130,10 @@ export default function CreateAppointmentModal({ visible, onClose, onSuccess }) 
             {step === 1 ? (
               <View style={styles.typesContainer}>
                 <TypeCard 
-                  title="Appointment with Lawyer" 
-                  icon="briefcase" 
-                  selected={type === 'lawyer'} 
-                  onPress={() => setType('lawyer')} 
+                  title={isLawyer ? "Appointment with Citizen" : "Appointment with Lawyer"} 
+                  icon={isLawyer ? "people" : "briefcase"} 
+                  selected={type === (isLawyer ? 'client' : 'lawyer')} 
+                  onPress={() => setType(isLawyer ? 'client' : 'lawyer')} 
                   theme={C} 
                 />
                 <TypeCard 
@@ -139,20 +160,20 @@ export default function CreateAppointmentModal({ visible, onClose, onSuccess }) 
               </View>
             ) : (
               <View style={styles.detailsContainer}>
-                {type === 'lawyer' && (
+                {(type === 'lawyer' || type === 'client') && (
                   <View style={styles.field}>
-                    <Text style={[styles.label, { color: C.foreground }]}>Select Lawyer</Text>
-                    {loadingLawyers ? <ActivityIndicator color={C.tint} /> : (
+                    <Text style={[styles.label, { color: C.foreground }]}>{isLawyer ? 'Select Citizen' : 'Select Lawyer'}</Text>
+                    {loadingParticipants ? <ActivityIndicator color={C.tint} /> : (
                       <View style={styles.lawyerList}>
-                        {lawyers.length === 0 ? (
-                          <Text style={{ color: C.mutedForeground }}>No recent lawyers found.</Text>
-                        ) : lawyers.map(l => (
+                        {participants.length === 0 ? (
+                          <Text style={{ color: C.mutedForeground }}>{isLawyer ? 'No recent citizens found.' : 'No recent lawyers found.'}</Text>
+                        ) : participants.map(p => (
                           <Pressable 
-                            key={l.id} 
-                            style={[styles.lawyerChip, lawyerId === l.id && { backgroundColor: C.tint, borderColor: C.tint }]}
-                            onPress={() => setLawyerId(l.id)}
+                            key={p.id} 
+                            style={[styles.lawyerChip, participantId === p.id && { backgroundColor: C.tint, borderColor: C.tint }]}
+                            onPress={() => setParticipantId(p.id)}
                           >
-                            <Text style={[styles.lawyerChipText, lawyerId === l.id && { color: '#fff' }]}>{l.name}</Text>
+                            <Text style={[styles.lawyerChipText, participantId === p.id && { color: '#fff' }]}>{p.name}</Text>
                           </Pressable>
                         ))}
                       </View>
@@ -244,9 +265,9 @@ export default function CreateAppointmentModal({ visible, onClose, onSuccess }) 
                     <Text style={{ color: C.foreground }}>Back</Text>
                   </Pressable>
                   <Pressable 
-                    style={[styles.saveBtn, { backgroundColor: C.tint }, (!title && type==='other') || (!lawyerId && type==='lawyer') ? {opacity: 0.5} : null]}
+                    style={[styles.saveBtn, { backgroundColor: C.tint }, (!title && type==='other') || (!participantId && (type==='lawyer' || type==='client')) ? {opacity: 0.5} : null]}
                     onPress={handleSave}
-                    disabled={submitting || (!title && type==='other') || (!lawyerId && type==='lawyer')}
+                    disabled={submitting || (!title && type==='other') || (!participantId && (type==='lawyer' || type==='client'))}
                   >
                     {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save Appointment</Text>}
                   </Pressable>

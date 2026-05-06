@@ -141,3 +141,21 @@ export async function updateProfile(req, res) {
     res.status(500).json({ error: 'Failed to update profile' });
   }
 }
+
+export async function createAppointment(req, res) {
+  try {
+    if (req.user.role !== 'lawyer') return res.status(403).json({ error: 'Unauthorized' });
+    const { title, type, date, location, user_id } = req.body;
+    const finalUserId = user_id || req.user.id;
+    const result = await pool.query(
+      `INSERT INTO appointments (user_id, title, type, date, location, lawyer_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [finalUserId, title, type, date, location || null, req.user.id]
+    );
+    res.status(201).json({ appointment: result.rows[0] });
+  } catch (error) {
+    console.error('createAppointment error:', error);
+    res.status(500).json({ error: 'Failed to create appointment' });
+  }
+}

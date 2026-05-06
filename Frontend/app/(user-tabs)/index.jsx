@@ -56,7 +56,6 @@ export default function UserDashboard() {
   const [loadingCases, setLoadingCases] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
-  const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [vaultFiles, setVaultFiles] = useState([]);
   const [loadingVault, setLoadingVault] = useState(true);
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
@@ -164,11 +163,6 @@ export default function UserDashboard() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <CreateAppointmentModal 
-        visible={appointmentModalVisible} 
-        onClose={() => setAppointmentModalVisible(false)} 
-        onSuccess={fetchAppointments} 
-      />
       <UploadActionSheet 
         visible={sheetVisible} 
         onClose={() => setSheetVisible(false)} 
@@ -240,11 +234,11 @@ export default function UserDashboard() {
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Appointments</Text>
-              <Pressable onPress={() => setAppointmentModalVisible(true)} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
+              <Pressable onPress={() => router.push('/(user-tabs)/create-appointment')} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
                 <Ionicons name="add" size={20} color={C.accent} />
               </Pressable>
             </View>
-            <Pressable onPress={() => router.push('/(user-tabs)/appointments')}>
+            <Pressable onPress={() => router.push('/(user-tabs)/all-appointments')}>
               <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
             </Pressable>
           </View>

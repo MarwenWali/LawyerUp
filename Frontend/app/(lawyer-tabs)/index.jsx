@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView, Platform, ActivityIndicator, Switch, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { View, Text, Pressable, StyleSheet, ScrollView, FlatList, Platform, ActivityIndicator, Switch, Alert } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -8,9 +8,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/constants/useTheme';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { casesApi, contactsApi, notificationsApi, lawyersApi } from '@/services/api';
+import { notificationsApi, lawyersApi, contactsApi, casesApi } from '@/services/api';
+import { supabase } from '@/utils/supabase';
 import NotificationsModal from '@/components/NotificationsModal';
 import ProfileImage from '@/components/ProfileImage';
+import CreateAppointmentModal from '@/components/CreateAppointmentModal';
 
 function formatTimeAgo(dateStr, t) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -28,9 +30,14 @@ export default function LawyerDashboard() {
   const firstName = user?.name?.replace('Maître ', '').split(' ')[0] || 'Lawyer';
 
   const PRIORITY_COLORS = { low: C.mutedForeground, medium: C.warning, high: C.destructive };
-  const [cases, setCases] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [pendingRequests, setPendingRequests] = useState(0);
+  const [activeCases, setActiveCases] = useState(0);
+  const [completedCases, setCompletedCases] = useState(0);
+  const [thisMonthCases, setThisMonthCases] = useState(0);
+  
+  const [appointments, setAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  
   const [notifVisible, setNotifVisible] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isAvailable, setIsAvailable] = useState(user?.is_available ?? true);
@@ -38,7 +45,6 @@ export default function LawyerDashboard() {
 
   useEffect(() => {
     notificationsApi.getAll().then(data => setUnreadCount(data?.unreadCount ?? 0)).catch(() => {});
-    // Sync availability from own profile
     lawyersApi.getById(user?.id).then(data => { if (typeof data?.isAvailable === 'boolean') setIsAvailable(data.isAvailable); }).catch(() => {});
   }, [user?.id]);
 
@@ -58,43 +64,69 @@ export default function LawyerDashboard() {
     }
   }
 
-  const fetchRequests = useCallback(async () => {
+  const fetchMetrics = useCallback(async () => {
+    if (!user?.id) return;
     try {
-      const data = await contactsApi.getAll();
-      setPendingRequests((data.requests || []).filter(r => r.status === 'pending').length);
-    } catch {}
-  }, []);
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
 
-  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+      const [reqData, casesData] = await Promise.all([
+        contactsApi.getAll(),
+        casesApi.getAll()
+      ]);
 
-  const fetchCases = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await casesApi.getAll();
-      setCases(Array.isArray(data) ? data : []);
+      const requests = reqData?.requests || [];
+      const casesList = casesData?.cases || [];
+
+      const reqCount = requests.filter(r => r.status === 'pending').length;
+      
+      const actCount = casesList.filter(c => ['accepted', 'active'].includes(c.status)).length;
+      const compCount = casesList.filter(c => ['closed', 'completed', 'rejected'].includes(c.status)).length;
+      
+      const monthCount = casesList.filter(c => new Date(c.createdAt || c.created_at).getTime() >= firstDayOfMonth).length;
+
+      setPendingRequests(reqCount);
+      setActiveCases(actCount);
+      setCompletedCases(compCount);
+      setThisMonthCases(monthCount);
     } catch (e) {
-      console.error('fetchCases error', e);
-    } finally {
-      setLoading(false);
+      console.error('fetchMetrics error:', e);
     }
-  }, []);
+  }, [user?.id]);
 
-  useEffect(() => { fetchCases(); }, [fetchCases]);
+  const fetchAppointments = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      setLoadingAppointments(true);
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('lawyer_id', user.id)
+        .gte('date', new Date().toISOString())
+        .order('date', { ascending: true })
+        .limit(2);
+        
+      if (!error && data) setAppointments(data);
+    } catch (e) {
+      console.error('fetchAppointments error:', e);
+    } finally {
+      setLoadingAppointments(false);
+    }
+  }, [user?.id]);
 
-  const now = new Date();
-  const thisMonth = cases.filter(c => {
-    const d = new Date(c.created_at || c.createdAt);
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
+  useFocusEffect(
+    useCallback(() => {
+      fetchMetrics();
+      fetchAppointments();
+    }, [fetchMetrics, fetchAppointments])
+  );
 
   const stats = [
-    { label: t.pending, value: String(cases.filter(c => c.status === 'pending').length), icon: 'time', color: C.warning, bg: 'rgba(245,158,11,0.1)' },
-    { label: t.active, value: String(cases.filter(c => c.status === 'accepted').length), icon: 'briefcase', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)' },
-    { label: t.completed, value: String(cases.filter(c => c.status === 'closed').length), icon: 'checkmark-circle', color: C.success, bg: 'rgba(22,163,74,0.1)' },
-    { label: t.thisMonth, value: `+${thisMonth}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)' },
+    { label: t.requests || 'Requests', value: String(pendingRequests), icon: 'mail-outline', color: C.warning, bg: 'rgba(245,158,11,0.1)', route: '/(lawyer-tabs)/requests' },
+    { label: t.active || 'Active', value: String(activeCases), icon: 'briefcase', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: `/(lawyer-tabs)/cases?filter=${t.accepted || 'Accepted'}` },
+    { label: t.completed || 'Completed', value: String(completedCases), icon: 'checkmark-circle', color: C.success, bg: 'rgba(22,163,74,0.1)', route: `/(lawyer-tabs)/cases?filter=${t.completed || 'Completed'}` },
+    { label: t.thisMonth || 'This Month', value: `+${thisMonthCases}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)', route: `/(lawyer-tabs)/cases?filter=${t.all || 'All'}` },
   ];
-
-  const pendingCases = cases.filter(c => c.status === 'pending').slice(0, 3);
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
@@ -156,100 +188,71 @@ export default function LawyerDashboard() {
 
         <View style={styles.statsGrid}>
           {stats.map((s, i) => (
-            <View key={i} style={[styles.statCard, { backgroundColor: C.card }]}>
+            <Pressable key={i} style={({ pressed }) => [styles.statCard, { backgroundColor: C.card }, pressed && { opacity: 0.8 }]} onPress={() => router.push(s.route)}>
               <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
                 <Ionicons name={s.icon} size={20} color={s.color} />
               </View>
               <Text style={[styles.statValue, { color: C.foreground }]}>{s.value}</Text>
               <Text style={[styles.statLabel, { color: C.textSecondary }]}>{s.label}</Text>
-            </View>
+            </Pressable>
           ))}
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: C.foreground }]}>{t.newRequests}</Text>
-            <Pressable onPress={() => router.push('/(lawyer-tabs)/cases')}>
-              <Text style={[styles.seeAll, { color: C.accent }]}>{t.viewAll}</Text>
+        {/* ── My Appointments ── */}
+        <View style={{ marginBottom: 28 }}>
+          <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Appointments</Text>
+              <Pressable onPress={() => router.push('/(lawyer-tabs)/create-appointment')} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
+                <Ionicons name="add" size={20} color={C.accent} />
+              </Pressable>
+            </View>
+            <Pressable onPress={() => router.push('/(lawyer-tabs)/all-appointments')}>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
             </Pressable>
           </View>
-          {loading ? <ActivityIndicator color={C.accent} style={{ marginTop: 20 }} /> : pendingCases.map(c => (
-            <View key={c.id} style={[styles.caseCard, { backgroundColor: C.card }]}>
-              <View style={styles.caseTop}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.caseName, { color: C.foreground }]}>{c.user_name || c.userName}</Text>
-                  <Text style={[styles.caseSubject, { color: C.accent }]}>{c.subject}</Text>
-                </View>
-                <View style={[styles.priorityBadge, { backgroundColor: (PRIORITY_COLORS[c.priority] || C.mutedForeground) + '20' }]}>
-                  <Text style={[styles.priorityText, { color: PRIORITY_COLORS[c.priority] || C.mutedForeground }]}>{c.priority || 'medium'}</Text>
-                </View>
-              </View>
-              <View style={styles.caseFooter}>
-                <View style={[styles.categoryTag, { backgroundColor: C.background }]}>
-                  <Text style={[styles.categoryText, { color: C.textSecondary }]}>{c.category}</Text>
-                </View>
-                <Text style={[styles.caseTime, { color: C.mutedForeground }]}>{formatTimeAgo(c.created_at || c.createdAt, t)}</Text>
-              </View>
-              <View style={styles.caseBtns}>
-                <Pressable
-                  style={({ pressed }) => [styles.acceptBtn, { backgroundColor: C.success }, pressed && { opacity: 0.85 }]}
-                  onPress={async () => { try { await casesApi.updateStatus(c.id, 'accepted'); fetchCases(); if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {} }}
-                >
-                  <Ionicons name="checkmark-circle" size={16} color="#fff" />
-                  <Text style={styles.acceptBtnText}>{t.accept}</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.rejectBtn, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]}
-                  onPress={async () => { try { await casesApi.updateStatus(c.id, 'rejected'); fetchCases(); if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {} }}
-                >
-                  <Ionicons name="close-circle" size={16} color={C.destructive} />
-                  <Text style={[styles.rejectBtnText, { color: C.destructive }]}>{t.reject}</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
+          {loadingAppointments ? (
+            <ActivityIndicator color={C.accent} style={{ paddingVertical: 32 }} />
+          ) : appointments.length === 0 ? (
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No upcoming appointments</Text>
+          ) : (
+            <FlatList
+              horizontal
+              data={appointments}
+              keyExtractor={item => String(item.id)}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+              renderItem={({ item }) => {
+                const dateObj = new Date(item.date);
+                const isCitizen = item.type === 'lawyer' || item.type === 'user' || item.type === 'client';
+                const isCourt = item.type === 'court';
+                return (
+                  <Pressable
+                    style={({ pressed }) => [{ width: 260, padding: 16, borderRadius: 16 }, { backgroundColor: C.card, borderColor: C.border, borderWidth: 1 }, pressed && { opacity: 0.88 }]}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: isCitizen ? 'rgba(59,130,246,0.1)' : isCourt ? 'rgba(184, 135, 47, 0.1)' : 'rgba(16,185,129,0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                        <Ionicons name={isCitizen ? 'people' : isCourt ? 'business' : 'calendar'} size={20} color={isCitizen ? '#3B82F6' : isCourt ? '#B8872F' : '#10B981'} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: C.foreground }} numberOfLines={1}>{item.title}</Text>
+                        <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.mutedForeground }}>{isCitizen ? 'Citizen Appointment' : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}</Text>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', padding: 8, borderRadius: 8 }}>
+                      <Ionicons name="time-outline" size={16} color={C.mutedForeground} style={{ marginRight: 6 }} />
+                      <Text style={{ fontSize: 12, fontFamily: 'Inter_500Medium', color: C.foreground }}>{dateObj.toLocaleDateString()} at {dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</Text>
+                    </View>
+                  </Pressable>
+                );
+              }}
+            />
+          )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: C.foreground }]}>{t.quickActions}</Text>
-          <View style={styles.quickActions}>
-            <Pressable
-              style={[styles.quickAction, { backgroundColor: C.card, borderColor: C.border }]}
-              onPress={() => router.push('/(lawyer-tabs)/requests')}
-            >
-              <Ionicons name="mail-outline" size={20} color={C.accent} />
-              <Text style={[styles.quickActionText, { color: C.foreground }]}>{t.requests || 'Requests'}</Text>
-              {pendingRequests > 0 && (
-                <View style={[styles.badge, { backgroundColor: C.destructive }]}>
-                  <Text style={styles.badgeText}>{pendingRequests}</Text>
-                </View>
-              )}
-            </Pressable>
-            <Pressable style={[styles.quickAction, { backgroundColor: C.card, borderColor: C.border }]} onPress={() => {}}>
-              <Ionicons name="calendar-outline" size={20} color={C.accent} />
-              <Text style={[styles.quickActionText, { color: C.foreground }]}>{t.scheduleLabel}</Text>
-            </Pressable>
-          </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.messagesCard,
-              { backgroundColor: C.card, borderColor: C.border },
-              pressed && { opacity: 0.9 },
-            ]}
-            onPress={() => router.push('/(messaging)/conversations')}
-          >
-            <View style={[styles.messagesIcon, { backgroundColor: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)' }]}>
-              <Ionicons name="chatbubbles-outline" size={24} color={C.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.messagesTitle, { color: C.foreground }]}>Messages</Text>
-              <Text style={[styles.messagesSubtitle, { color: C.mutedForeground }]}>
-                View citizen conversations
-              </Text>
-            </View>
-            <Feather name="chevron-right" size={16} color={C.mutedForeground} />
-          </Pressable>
-        </View>
       </ScrollView>
     </View>
   );
@@ -300,4 +303,6 @@ const styles = StyleSheet.create({
   availIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   availTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   availSub: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', padding: 24 },
 });

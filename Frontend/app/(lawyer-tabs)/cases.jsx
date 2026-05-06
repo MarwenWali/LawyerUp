@@ -6,18 +6,37 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { casesApi } from '@/services/api';
+import { useLocalSearchParams } from 'expo-router';
 
 export default function CasesPage() {
   const insets = useSafeAreaInsets();
   const C = useTheme();
   const { t } = useLanguage();
+  const params = useLocalSearchParams();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState(t.all);
+  
+  const STATUS_FILTERS = useMemo(() => [t.all, t.pending, t.accepted, t.completed, t.rejected], [t]);
+  
+  // Resolve initial filter from params if it matches one of our filters
+  const getInitialFilter = () => {
+    if (!params.filter) return t.all;
+    const match = STATUS_FILTERS.find(f => f.toLowerCase() === params.filter.toLowerCase());
+    return match || t.all;
+  };
+  
+  const [filter, setFilter] = useState(getInitialFilter());
+  
+  // Also update filter if params change
+  useEffect(() => {
+    if (params.filter) {
+      const match = STATUS_FILTERS.find(f => f.toLowerCase() === params.filter.toLowerCase());
+      if (match) setFilter(match);
+    }
+  }, [params.filter, STATUS_FILTERS]);
+
   const [selectedCase, setSelectedCase] = useState(null);
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const STATUS_FILTERS = [t.all, t.pending, t.accepted, t.completed, t.rejected];
 
   const fetchCases = useCallback(async () => {
     try {

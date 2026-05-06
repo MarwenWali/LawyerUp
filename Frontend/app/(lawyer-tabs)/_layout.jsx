@@ -50,6 +50,8 @@ function ClassicTabLayout() {
       <Tabs.Screen name="inbox-chat" options={{ href: null }} />
       <Tabs.Screen name="inbox-old-tabs" options={{ href: null }} />
       <Tabs.Screen name="inbox-unified" options={{ href: null }} />
+      <Tabs.Screen name="all-appointments" options={{ href: null }} />
+      <Tabs.Screen name="create-appointment" options={{ href: null }} />
     </Tabs>
   );
 }
