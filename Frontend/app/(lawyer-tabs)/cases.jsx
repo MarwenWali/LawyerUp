@@ -5,8 +5,8 @@ import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { casesApi } from '@/services/api';
-import { useLocalSearchParams } from 'expo-router';
+import { casesApi, contactsApi } from '@/services/api';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 
 export default function CasesPage() {
   const insets = useSafeAreaInsets();
@@ -15,13 +15,13 @@ export default function CasesPage() {
   const params = useLocalSearchParams();
   const [search, setSearch] = useState('');
   
-  const STATUS_FILTERS = useMemo(() => [t.all, t.pending, t.accepted, t.completed, t.rejected], [t]);
+  const STATUS_FILTERS = ['Incoming', 'Active', 'Completed', 'Rejected'];
   
   // Resolve initial filter from params if it matches one of our filters
   const getInitialFilter = () => {
-    if (!params.filter) return t.all;
+    if (!params.filter) return 'Incoming';
     const match = STATUS_FILTERS.find(f => f.toLowerCase() === params.filter.toLowerCase());
-    return match || t.all;
+    return match || 'Incoming';
   };
   
   const [filter, setFilter] = useState(getInitialFilter());
@@ -41,8 +41,28 @@ export default function CasesPage() {
   const fetchCases = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await casesApi.getAll();
-      setCases(data.cases);
+      const [casesData, contactsData] = await Promise.all([
+        casesApi.getAll(),
+        contactsApi.getAll()
+      ]);
+      
+      const normalizedCases = (casesData.cases || []).map(c => ({ ...c, type: 'case' }));
+      const normalizedContacts = (contactsData.requests || []).map(r => ({
+        id: `cr_${r.id}`,
+        dbId: r.id,
+        type: 'contact',
+        userName: r.requester_name,
+        userEmail: r.requester_email,
+        subject: 'Contact Request',
+        description: r.message,
+        category: 'Inquiry',
+        status: r.status,
+        priority: 'medium',
+        createdAt: r.created_at,
+        updatedAt: r.created_at
+      }));
+
+      setCases([...normalizedCases, ...normalizedContacts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
     } catch (e) {
       Alert.alert('Error', 'Failed to load cases');
     } finally {
@@ -50,20 +70,35 @@ export default function CasesPage() {
     }
   }, []);
 
-  useEffect(() => { fetchCases(); }, [fetchCases]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchCases();
+    }, [fetchCases])
+  );
 
-  async function handleUpdateStatus(caseId, status) {
+  async function handleUpdateStatus(caseItem, status) {
     try {
       if (Platform.OS !== 'web') {
         status === 'accepted'
           ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
           : Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       }
-      await casesApi.updateStatus(caseId, status);
-      setCases(prev => prev.map(c => c.id === caseId ? { ...c, status } : c));
-      if (selectedCase?.id === caseId) setSelectedCase(prev => ({ ...prev, status }));
+
+      if (caseItem.type === 'contact') {
+        await contactsApi.respond(caseItem.dbId, status);
+      } else {
+        await casesApi.updateStatus(caseItem.id, status);
+      }
+
+      setCases(prev => prev.map(c => c.id === caseItem.id ? { ...c, status } : c));
+      if (selectedCase?.id === caseItem.id) setSelectedCase(prev => ({ ...prev, status }));
+      
+      // Automatically move to the Active filter view when accepting
+      if (status === 'accepted') {
+        setFilter('Active');
+      }
     } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to update case');
+      Alert.alert('Error', e.message || 'Failed to update status');
     }
   }
 
@@ -76,7 +111,12 @@ function formatTimeAgo(dateStr, t) {
 
 function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
   const PRIORITY_COLORS = { low: C.mutedForeground, medium: C.warning, high: C.destructive };
-  const STATUS_COLORS = { pending: C.warning, accepted: C.tint, completed: C.success, rejected: C.destructive };
+  const STATUS_COLORS = { 
+    pending: C.warning, 
+    accepted: C.success,  // Active cases are now Green
+    completed: C.tint,    // Completed cases are Blue
+    rejected: C.destructive 
+  };
 
   return (
     <Pressable style={({ pressed }) => [styles.caseCard, { backgroundColor: C.card }, pressed && { opacity: 0.9 }]} onPress={onPress}>
@@ -120,9 +160,10 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
             <Feather name="message-circle" size={16} color={C.tint} />
             <Text style={[styles.msgBtnText, { color: C.tint }]}>{t.message}</Text>
           </Pressable>
-          <Pressable style={({ pressed }) => [styles.videoBtn, { backgroundColor: C.accent }, pressed && { opacity: 0.85 }]}>
-            <Ionicons name="videocam" size={16} color={C.tint} />
-            <Text style={[styles.videoBtnText, { color: C.tint }]}>{t.videoCall}</Text>
+          <Pressable style={({ pressed }) => [styles.acceptBtn, { backgroundColor: C.tint }, pressed && { opacity: 0.85 }]}
+            onPress={() => onAccept('completed')}>
+            <Ionicons name="checkmark-done" size={16} color="#fff" />
+            <Text style={styles.acceptBtnText}>{t.complete || 'Complete'}</Text>
           </Pressable>
         </View>
       )}
@@ -133,10 +174,18 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
   const filtered = useMemo(() => {
     return cases.filter(c => {
       const matchesSearch = (c.userName || c.user_name || '').toLowerCase().includes(search.toLowerCase()) || c.subject.toLowerCase().includes(search.toLowerCase());
-      const matchesFilter = filter === t.all || c.status === filter.toLowerCase();
+      
+      let targetStatus = 'pending';
+      let skipFilter = false;
+      if (filter === 'Active') targetStatus = 'accepted';
+      else if (filter === 'Completed') targetStatus = 'completed';
+      else if (filter === 'Archive' || filter === 'Rejected') targetStatus = 'rejected';
+      else if (filter === 'All') skipFilter = true;
+      
+      const matchesFilter = skipFilter || c.status === targetStatus;
       return matchesSearch && matchesFilter;
     });
-  }, [search, filter, t.all, cases]);
+  }, [search, filter, cases]);
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -158,7 +207,16 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
 
         <FlatList
           data={filtered}
-          renderItem={({ item }) => <CaseCard c={item} onPress={() => setSelectedCase(item)} onAccept={() => handleUpdateStatus(item.id, 'accepted')} onReject={() => handleUpdateStatus(item.id, 'rejected')} C={C} t={t} />}
+          renderItem={({ item }) => (
+            <CaseCard 
+              c={item} 
+              onPress={() => setSelectedCase(item)} 
+              onAccept={(st) => handleUpdateStatus(item, st || 'accepted')} 
+              onReject={() => handleUpdateStatus(item, 'rejected')} 
+              C={C} 
+              t={t} 
+            />
+          )}
           keyExtractor={c => c.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: 12 }}
           showsVerticalScrollIndicator={false}

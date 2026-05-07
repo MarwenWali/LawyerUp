@@ -12,6 +12,7 @@ import { notificationsApi, lawyersApi, contactsApi, casesApi } from '@/services/
 import { supabase } from '@/utils/supabase';
 import NotificationsModal from '@/components/NotificationsModal';
 import ProfileImage from '@/components/ProfileImage';
+import StatusAvatar from '@/components/StatusAvatar';
 import CreateAppointmentModal from '@/components/CreateAppointmentModal';
 
 function formatTimeAgo(dateStr, t) {
@@ -75,17 +76,19 @@ export default function LawyerDashboard() {
         casesApi.getAll()
       ]);
 
-      const requests = reqData?.requests || [];
+      const requestsList = reqData?.requests || [];
       const casesList = casesData?.cases || [];
 
-      const reqCount = requests.filter(r => r.status === 'pending').length;
+      // Unified Incoming count (Pending cases + Pending contact requests)
+      const incCount = casesList.filter(c => c.status === 'pending').length + requestsList.filter(r => r.status === 'pending').length;
       
-      const actCount = casesList.filter(c => ['accepted', 'active'].includes(c.status)).length;
-      const compCount = casesList.filter(c => ['closed', 'completed', 'rejected'].includes(c.status)).length;
+      const actCount = casesList.filter(c => c.status === 'accepted').length + requestsList.filter(r => r.status === 'accepted').length;
+      const compCount = casesList.filter(c => c.status === 'completed').length;
       
-      const monthCount = casesList.filter(c => new Date(c.createdAt || c.created_at).getTime() >= firstDayOfMonth).length;
+      const monthCount = casesList.filter(c => new Date(c.createdAt || c.created_at).getTime() >= firstDayOfMonth).length +
+                         requestsList.filter(r => new Date(r.created_at).getTime() >= firstDayOfMonth).length;
 
-      setPendingRequests(reqCount);
+      setPendingRequests(incCount);
       setActiveCases(actCount);
       setCompletedCases(compCount);
       setThisMonthCases(monthCount);
@@ -118,14 +121,20 @@ export default function LawyerDashboard() {
     useCallback(() => {
       fetchMetrics();
       fetchAppointments();
-    }, [fetchMetrics, fetchAppointments])
+      // Sync availability
+      if (user?.id) {
+        lawyersApi.getById(user.id)
+          .then(data => { if (typeof data?.isAvailable === 'boolean') setIsAvailable(data.isAvailable); })
+          .catch(() => {});
+      }
+    }, [fetchMetrics, fetchAppointments, user?.id])
   );
 
   const stats = [
-    { label: t.requests || 'Requests', value: String(pendingRequests), icon: 'mail-outline', color: C.warning, bg: 'rgba(245,158,11,0.1)', route: '/(lawyer-tabs)/requests' },
-    { label: t.active || 'Active', value: String(activeCases), icon: 'briefcase', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: `/(lawyer-tabs)/cases?filter=${t.accepted || 'Accepted'}` },
-    { label: t.completed || 'Completed', value: String(completedCases), icon: 'checkmark-circle', color: C.success, bg: 'rgba(22,163,74,0.1)', route: `/(lawyer-tabs)/cases?filter=${t.completed || 'Completed'}` },
-    { label: t.thisMonth || 'This Month', value: `+${thisMonthCases}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)', route: `/(lawyer-tabs)/cases?filter=${t.all || 'All'}` },
+    { label: 'Incoming', value: String(pendingRequests), icon: 'mail-outline', color: C.warning, bg: 'rgba(245,158,11,0.1)', route: '/(lawyer-tabs)/cases?filter=Incoming' },
+    { label: 'Active', value: String(activeCases), icon: 'briefcase', color: C.success, bg: 'rgba(22,163,74,0.1)', route: '/(lawyer-tabs)/cases?filter=Active' },
+    { label: 'Completed', value: String(completedCases), icon: 'checkmark-circle', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: '/(lawyer-tabs)/cases?filter=Completed' },
+    { label: 'This Month', value: `+${thisMonthCases}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)', route: '/(lawyer-tabs)/cases?filter=All' },
   ];
 
   return (
@@ -149,14 +158,15 @@ export default function LawyerDashboard() {
               </View>
             )}
           </View>
-          <Pressable
-            onPress={() => {
+          <StatusAvatar 
+            url={user?.profile_photo_url} 
+            size={40} 
+            isAvailable={isAvailable}
+            onPhotoPress={() => {
               if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               router.push('/(lawyer-tabs)/profile');
             }}
-          >
-            <ProfileImage url={user?.profile_photo_url} size={44} />
-          </Pressable>
+          />
           <NotificationsModal
             visible={notifVisible}
             onClose={() => setNotifVisible(false)}
@@ -164,36 +174,26 @@ export default function LawyerDashboard() {
           />
         </View>
 
-        {/* Availability toggle */}
-        <View style={[styles.availCard, { backgroundColor: C.card }]}>
-          <View style={styles.availLeft}>
-            <View style={[styles.availIcon, { backgroundColor: isAvailable ? 'rgba(22,163,74,0.12)' : 'rgba(239,68,68,0.1)' }]}>
-              <Ionicons name={isAvailable ? 'checkmark-circle' : 'close-circle'} size={20} color={isAvailable ? C.success : C.destructive} />
-            </View>
-            <View>
-              <Text style={[styles.availTitle, { color: C.foreground }]}>{t.acceptingCasesTitle}</Text>
-              <Text style={[styles.availSub, { color: C.textSecondary }]}>{isAvailable ? t.visibleToClients : t.hiddenFromSearches}</Text>
-            </View>
-          </View>
-          {availLoading
-            ? <ActivityIndicator size="small" color={C.accent} />
-            : <Switch
-                value={isAvailable}
-                onValueChange={handleAvailabilityToggle}
-                trackColor={{ false: '#e5e7eb', true: C.success + '55' }}
-                thumbColor={isAvailable ? C.success : '#9ca3af'}
-                ios_backgroundColor="#e5e7eb"
-              />}
-        </View>
+
 
         <View style={styles.statsGrid}>
           {stats.map((s, i) => (
-            <Pressable key={i} style={({ pressed }) => [styles.statCard, { backgroundColor: C.card }, pressed && { opacity: 0.8 }]} onPress={() => router.push(s.route)}>
-              <View style={[styles.statIcon, { backgroundColor: s.bg }]}>
-                <Ionicons name={s.icon} size={20} color={s.color} />
+            <Pressable 
+              key={i} 
+              style={({ pressed }) => [
+                styles.statCard, 
+                { backgroundColor: C.card, borderTopColor: s.color, borderTopWidth: !isDark ? 3 : 0, borderColor: C.border }, 
+                pressed && { opacity: 0.8 }
+              ]} 
+              onPress={() => router.push(s.route)}
+            >
+              <View style={[styles.statIcon, { backgroundColor: isDark ? s.bg : 'transparent' }]}>
+                <Ionicons name={s.icon} size={22} color={s.color} />
               </View>
-              <Text style={[styles.statValue, { color: C.foreground }]}>{s.value}</Text>
-              <Text style={[styles.statLabel, { color: C.textSecondary }]}>{s.label}</Text>
+              <View>
+                <Text style={[styles.statValue, { color: C.foreground }]}>{s.value}</Text>
+                <Text style={[styles.statLabel, { color: C.textSecondary }]}>{s.label}</Text>
+              </View>
             </Pressable>
           ))}
         </View>
@@ -266,10 +266,20 @@ const styles = StyleSheet.create({
   avatarSmall: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   avatarSmallText: { fontSize: 18, fontFamily: 'Inter_700Bold' },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 10, marginBottom: 24 },
-  statCard: { width: '47%', borderRadius: 14, padding: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
-  statIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  statCard: { 
+    width: '47%', 
+    borderRadius: 16, 
+    padding: 16, 
+    borderWidth: 1,
+    elevation: 2, 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.05, 
+    shadowRadius: 10 
+  },
+  statIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   statValue: { fontSize: 24, fontFamily: 'Inter_700Bold' },
-  statLabel: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  statLabel: { fontSize: 13, fontFamily: 'Inter_500Medium', marginTop: 2 },
   section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontFamily: 'Inter_700Bold' },
@@ -298,11 +308,7 @@ const styles = StyleSheet.create({
   messagesSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
   badge: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
   badgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#fff' },
-  availCard: { marginHorizontal: 20, marginBottom: 20, borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
-  availLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  availIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  availTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  availSub: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  badgeText: { fontSize: 10, fontFamily: 'Inter_700Bold', color: '#fff' },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   emptyText: { fontSize: 14, fontFamily: 'Inter_400Regular', textAlign: 'center', padding: 24 },
 });

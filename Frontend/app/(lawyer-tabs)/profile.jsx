@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView, Platform,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Alert, Image, Switch,
 } from 'react-native';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -15,6 +16,41 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { userApi, lawyersApi } from '@/services/api';
 import { SPECIALIZATION_OPTIONS } from '@/constants/mockData';
 import ProfileImage from '@/components/ProfileImage';
+import StatusAvatar from '@/components/StatusAvatar';
+
+// ── Memoized Components to prevent cursor jumping ─────────────────────────
+const MemoizedGlassInput = memo(({ 
+  icon, 
+  value, 
+  onChangeText, 
+  placeholder, 
+  secureTextEntry, 
+  keyboardType, 
+  onFocus, 
+  onBlur, 
+  isFocused, 
+  multiline,
+  styles,
+  C
+}) => (
+  <View style={[styles.glassInputWrapper, isFocused && styles.glassInputFocused]}>
+    {icon && <Feather name={icon} size={18} color={isFocused ? C.accent : 'rgba(212,175,55,0.4)'} style={styles.inputIcon} />}
+    <TextInput
+      style={[styles.glassInput, multiline && styles.glassTextArea, { color: C.foreground }]}
+      value={value}
+      onChangeText={onChangeText}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      placeholder={placeholder}
+      placeholderTextColor={C.mutedForeground}
+      secureTextEntry={secureTextEntry}
+      keyboardType={keyboardType}
+      multiline={multiline}
+      cursorColor={C.accent}
+      selectionColor={C.accent + '44'}
+    />
+  </View>
+));
 
 export default function LawyerProfilePage() {
   const { user, logout, updateUser, uploadPhoto } = useAuth();
@@ -48,6 +84,9 @@ export default function LawyerProfilePage() {
   // ── Info modals ───────────────────────────────────────────────────────────
   const [helpOpen, setHelpOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  // ── Focus state for inputs ──────────────────────────────────────────────
+  const [focusedField, setFocusedField] = useState(null);
 
   // ── Availability state ─────────────────────────────────────────────────
   const [isAvailable, setIsAvailable] = useState(true);
@@ -158,206 +197,268 @@ export default function LawyerProfilePage() {
     router.replace('/(auth)/login');
   }
 
-  const menuItems = [
+  const accountItems = [
     { icon: 'person-outline', label: t.editProfile, onPress: openEdit },
     { icon: 'lock-closed-outline', label: t.changePasswordTitle, onPress: () => setPwdOpen(true) },
     { icon: 'document-text-outline', label: t.certifications },
+  ];
+
+  const supportItems = [
     { icon: 'shield-checkmark-outline', label: t.privacy, onPress: () => setPrivacyOpen(true) },
     { icon: 'help-circle-outline', label: t.help, onPress: () => setHelpOpen(true) },
   ];
 
+  // Ensure Tounsi is first
+  const sortedLanguages = [...availableLanguages].sort((a, b) => {
+    if (a.key === 'ar') return -1;
+    if (b.key === 'ar') return 1;
+    return 0;
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
-        <View style={styles.profileHeader}>
-          <Pressable onPress={handlePhotoUpload} style={styles.avatarWrapper}>
-            <ProfileImage url={user?.profile_photo_url} size={80} />
-            {photoLoading
-              ? <ActivityIndicator style={styles.avatarEdit} color={C.accent} />
-              : <View style={[styles.avatarEdit, { backgroundColor: C.accent }]}><Feather name="camera" size={14} color="#fff" /></View>
-            }
-          </Pressable>
-          <Text style={[styles.profileName, { color: C.foreground }]}>{displayName}</Text>
-          <Text style={[styles.profileEmail, { color: C.textSecondary }]}>{user?.email}</Text>
-          {user?.phone_number ? (
-            <Text style={[styles.profilePhone, { color: C.textSecondary }]}>{user.phone_number}</Text>
-          ) : null}
-          {user?.specialization ? (
-            <Text style={[styles.profileSpec, { color: C.textSecondary }]}>{user.specialization}</Text>
-          ) : null}
-          <View style={[styles.roleBadge, { backgroundColor: 'rgba(22,163,74,0.1)' }]}><Text style={[styles.roleBadgeText, { color: C.success }]}>{t.verifiedLawyer}</Text></View>
-          <View style={[styles.availBadge, { backgroundColor: isAvailable ? 'rgba(22,163,74,0.1)' : 'rgba(239,68,68,0.1)' }]}>
-            <View style={[styles.availDot, { backgroundColor: isAvailable ? C.success : C.destructive }]} />
-            <Text style={[styles.availBadgeText, { color: isAvailable ? C.success : C.destructive }]}>
-              {isAvailable ? t.availableForCases : t.currentlyUnavailable}
-            </Text>
-          </View>
-        </View>
-        <View style={[styles.settingsCard, { backgroundColor: C.card }]}>
-          <View style={styles.availRow}>
-            <View style={styles.availLeft}>
-              <View style={[styles.availIconBox, { backgroundColor: isAvailable ? 'rgba(22,163,74,0.12)' : 'rgba(239,68,68,0.1)' }]}>
-                <Ionicons name={isAvailable ? 'checkmark-circle' : 'close-circle'} size={20} color={isAvailable ? C.success : C.destructive} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.availTitle, { color: C.foreground }]}>{t.acceptNewCases}</Text>
-                <Text style={[styles.availSubtitle, { color: C.textSecondary }]}>
-                  {isAvailable ? t.visibleToClientsSeeking : t.hiddenFromNewClients}
-                </Text>
-              </View>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 60 }}
+      >
+        {/* ── 1. Header with Status Dot ── */}
+        <View style={styles.headerSimple}>
+          <View style={styles.headerSimpleTop}>
+            <StatusAvatar 
+              url={user?.profile_photo_url} 
+              size={76} 
+              isAvailable={isAvailable} 
+              onPhotoPress={handlePhotoUpload}
+              showEditIcon={true}
+            />
+            <View style={styles.headerInfoSimple}>
+              <Text style={[styles.profileNameLarge, { color: C.foreground }]}>{displayName}</Text>
+              <Text style={[styles.profileEmailSmall, { color: C.textSecondary }]}>{user?.email}</Text>
+              <Text style={[styles.profileSpecSmall, { color: C.textSecondary }]}>{user?.specialization || 'Lawyer'}</Text>
             </View>
-            {availLoading
-              ? <ActivityIndicator size="small" color={C.accent} />
-              : <Switch
-                value={isAvailable}
-                onValueChange={handleAvailabilityToggle}
-                trackColor={{ false: '#e5e7eb', true: C.success + '55' }}
-                thumbColor={isAvailable ? C.success : '#9ca3af'}
-                ios_backgroundColor="#e5e7eb"
-              />}
           </View>
         </View>
 
-        <View style={[styles.settingsCard, { backgroundColor: C.card }]}>
-          <Text style={[styles.sectionTitle, { color: C.textSecondary }]}>{t.theme}</Text>
-          <View style={styles.themeRow}>
-            {[{ key: 'light', icon: 'sunny-outline', label: t.light }, { key: 'dark', icon: 'moon-outline', label: t.dark }].map((mode) => (
+        {/* ── 2. Unified Preferences Row ── */}
+        <View style={[styles.preferencesCard, { backgroundColor: C.card }]}>
+          <View style={styles.prefRowItem}>
+            <View style={styles.prefLeft}>
+              <Ionicons name="notifications-outline" size={18} color={C.accent} />
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>Accept Cases</Text>
+            </View>
+            <Switch
+              value={isAvailable}
+              onValueChange={handleAvailabilityToggle}
+              trackColor={{ false: '#e5e7eb', true: C.success + '55' }}
+              thumbColor={isAvailable ? C.success : '#9ca3af'}
+              ios_backgroundColor="#e5e7eb"
+              style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+            />
+          </View>
+
+          <View style={[styles.dividerFull, { backgroundColor: C.border }]} />
+
+          <View style={styles.prefRowItem}>
+            <View style={styles.prefLeft}>
+              <Ionicons name="moon-outline" size={18} color={C.accent} />
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>Display Mode</Text>
+            </View>
+            <View style={styles.themeToggleCompact}>
+              {['light', 'dark'].map((mode) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => toggleTheme(mode)}
+                  style={[
+                    styles.themeIconPill,
+                    themeMode === mode && { backgroundColor: C.accent }
+                  ]}
+                >
+                  <Ionicons 
+                    name={mode === 'light' ? 'sunny' : 'moon'} 
+                    size={13} 
+                    color={themeMode === mode ? '#fff' : C.mutedForeground} 
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* ── 3. Horizontal Language Picker ── */}
+        <View style={[styles.languagePillCard, { backgroundColor: C.card }]}>
+          <View style={styles.pillScroll}>
+            {sortedLanguages.map((lang) => {
+              const active = language === lang.key;
+              return (
+                <Pressable
+                  key={lang.key}
+                  style={[
+                    styles.langPillCompact,
+                    { backgroundColor: C.muted },
+                    active && { backgroundColor: C.accent }
+                  ]}
+                  onPress={() => changeLanguage(lang.key)}
+                >
+                  <Text style={[styles.langPillTextSmall, { color: C.foreground }, active && { color: '#fff' }]}>
+                    {lang.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* ── 4. Grouped Menu ── */}
+        <View style={styles.menuSection}>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Account Settings</Text>
+          <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
+            {accountItems.map((item, i) => (
               <Pressable
-                key={mode.key}
-                style={[styles.themeOption, { backgroundColor: C.muted, borderColor: C.border }, themeMode === mode.key && { backgroundColor: C.accentLight, borderColor: C.accent }]}
-                onPress={() => {
-                  toggleTheme(mode.key);
-                  if (Platform.OS !== 'web') Haptics.selectionAsync();
-                }}
+                key={i}
+                style={[styles.menuRowSimple, i < accountItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                onPress={item.onPress}
               >
-                <Ionicons name={mode.icon} size={20} color={themeMode === mode.key ? C.accent : C.mutedForeground} />
-                <Text style={[styles.themeLabel, { color: themeMode === mode.key ? C.accent : C.textSecondary }]}>{mode.label}</Text>
+                <Ionicons name={item.icon} size={20} color={C.accent} style={{ width: 24 }} />
+                <Text style={[styles.menuLabelSimple, { color: C.foreground }]}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={C.mutedForeground} />
               </Pressable>
             ))}
           </View>
         </View>
 
-        <View style={[styles.settingsCard, { backgroundColor: C.card }]}>
-          <Text style={[styles.sectionTitle, { color: C.textSecondary }]}>{t.language}</Text>
-          <View style={styles.languageList}>
-            {availableLanguages.map((lang, i) => (
+        <View style={styles.menuSection}>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Support</Text>
+          <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
+            {supportItems.map((item, i) => (
               <Pressable
-                key={lang.key}
-                style={[styles.languageRow, i < availableLanguages.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                onPress={() => {
-                  changeLanguage(lang.key);
-                  if (Platform.OS !== 'web') Haptics.selectionAsync();
-                }}
+                key={i}
+                style={[styles.menuRowSimple, i < supportItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                onPress={item.onPress}
               >
-                <Text style={[styles.languageLabel, { color: C.foreground }]}>{lang.label}</Text>
-                {language === lang.key && <Ionicons name="checkmark-circle" size={22} color={C.accent} />}
+                <Ionicons name={item.icon} size={20} color={C.accent} style={{ width: 24 }} />
+                <Text style={[styles.menuLabelSimple, { color: C.foreground }]}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={C.mutedForeground} />
               </Pressable>
             ))}
           </View>
         </View>
-        <View style={[styles.menuCard, { backgroundColor: C.card }]}>
-          {menuItems.map((item, i) => (
-            <Pressable
-              key={i}
-              style={[styles.menuRow, i < menuItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-              onPress={item.onPress}
-            >
-              <Ionicons name={item.icon} size={22} color={C.textSecondary} />
-              <Text style={[styles.menuLabel, { color: C.foreground }]}>{item.label}</Text>
-              <Feather name="chevron-right" size={18} color={C.mutedForeground} />
-            </Pressable>
-          ))}
+
+        {/* ── Sign Out ── */}
+        <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+          <Pressable 
+            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]} 
+            onPress={handleLogout}
+          >
+            <Text style={[styles.signOutTextRed, { color: C.destructive }]}>{t.signOut}</Text>
+          </Pressable>
         </View>
-        <Pressable style={({ pressed }) => [styles.logoutBtn, { backgroundColor: C.card, borderColor: C.destructive }, pressed && { opacity: 0.85 }]} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color={C.destructive} />
-          <Text style={[styles.logoutText, { color: C.destructive }]}>{t.signOut}</Text>
-        </Pressable>
+        
         <Text style={[styles.version, { color: C.mutedForeground }]}>LawyerUp v1.0.0</Text>
       </ScrollView>
 
       {/* ── Edit Profile Modal ── */}
       <Modal visible={editOpen} animationType="slide" transparent onRequestClose={() => setEditOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={styles.modalBackdrop} onPress={() => { setEditOpen(false); setSpecPickerOpen(false); }} />
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => { setEditOpen(false); setFocusedField(null); }} />
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.editProfileTitle}</Text>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
               <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.fullName}</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
+              <MemoizedGlassInput
+                icon="user"
                 value={draftName}
                 onChangeText={setDraftName}
+                onFocus={() => setFocusedField('name')}
+                onBlur={() => setFocusedField(null)}
+                isFocused={focusedField === 'name'}
                 placeholder="Your full name"
-                placeholderTextColor={C.mutedForeground}
-                autoCapitalize="words"
+                styles={styles}
+                C={C}
               />
 
               <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.phoneNumber}</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
+              <MemoizedGlassInput
+                icon="phone"
                 value={draftPhone}
                 onChangeText={setDraftPhone}
+                onFocus={() => setFocusedField('phone')}
+                onBlur={() => setFocusedField(null)}
+                isFocused={focusedField === 'phone'}
                 placeholder="+216 XX XXX XXX"
-                placeholderTextColor={C.mutedForeground}
                 keyboardType="phone-pad"
+                styles={styles}
+                C={C}
               />
 
               <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.specializationLabel}</Text>
-              <Pressable
-                style={[styles.input, styles.pickerBtn, { backgroundColor: C.muted, borderColor: C.border }]}
-                onPress={() => setSpecPickerOpen(v => !v)}
-              >
-                <Text style={{ color: C.foreground, fontSize: 15, fontFamily: 'Inter_400Regular', flex: 1 }}>{draftSpec || t.selectLabel}</Text>
-                <Feather name={specPickerOpen ? 'chevron-up' : 'chevron-down'} size={16} color={C.mutedForeground} />
-              </Pressable>
-              {specPickerOpen && (
-                <View style={[styles.inlineDropdown, { backgroundColor: C.card, borderColor: C.border }]}>
-                  {SPECIALIZATION_OPTIONS.map(item => (
-                    <Pressable
-                      key={item}
-                      style={[styles.dropdownOption, item === draftSpec && { backgroundColor: C.accentLight }]}
-                      onPress={() => { setDraftSpec(item); setSpecPickerOpen(false); }}
-                    >
-                      <Text style={[styles.dropdownOptionText, { color: C.foreground }, item === draftSpec && { color: C.accent, fontFamily: 'Inter_600SemiBold' }]}>{item}</Text>
-                      {item === draftSpec && <Ionicons name="checkmark" size={16} color={C.accent} />}
-                    </Pressable>
-                  ))}
-                </View>
-              )}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                {SPECIALIZATION_OPTIONS.map(item => (
+                  <Pressable
+                    key={item}
+                    onPress={() => setDraftSpec(item)}
+                    style={[styles.chip, draftSpec === item && { backgroundColor: C.accent, borderColor: C.accent }]}
+                  >
+                    <Text style={[styles.chipText, { color: C.foreground }, draftSpec === item && { color: '#fff' }]}>{item}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
 
               <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.yearsExpLabel}</Text>
-              <TextInput
-                style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-                value={draftExp} onChangeText={setDraftExp}
-                placeholder="e.g. 5" placeholderTextColor={C.mutedForeground}
+              <MemoizedGlassInput
+                icon="award"
+                value={draftExp}
+                onChangeText={setDraftExp}
+                onFocus={() => setFocusedField('exp')}
+                onBlur={() => setFocusedField(null)}
+                isFocused={focusedField === 'exp'}
+                placeholder="Years of experience"
                 keyboardType="number-pad"
+                styles={styles}
+                C={C}
               />
 
               <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.bioLabel}</Text>
-              <TextInput
-                style={[styles.input, styles.textArea, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
+              <MemoizedGlassInput
                 value={draftBio}
                 onChangeText={setDraftBio}
-                placeholder="A short description about yourself"
-                placeholderTextColor={C.mutedForeground}
+                onFocus={() => setFocusedField('bio')}
+                onBlur={() => setFocusedField(null)}
+                isFocused={focusedField === 'bio'}
+                placeholder="About yourself..."
                 multiline
-                numberOfLines={3}
+                styles={styles}
+                C={C}
               />
 
               <View style={styles.sheetActions}>
-                <Pressable style={[styles.btnOutline, { borderColor: C.border }]} onPress={() => { setEditOpen(false); setSpecPickerOpen(false); }}>
-                  <Text style={[styles.btnOutlineText, { color: C.foreground }]}>{t.cancel}</Text>
+                <Pressable style={styles.btnGhostGold} onPress={() => setEditOpen(false)}>
+                  <Text style={[styles.btnGhostText, { color: C.accent }]}>{t.cancel}</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.btnPrimary, { backgroundColor: C.accent }, saving && { opacity: 0.7 }]}
                   onPress={saveEdit}
                   disabled={saving}
+                  style={({ pressed }) => [styles.btnPrimaryWrapper, saving && { opacity: 0.7 }, pressed && { opacity: 0.9 }]}
                 >
-                  {saving
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={styles.btnPrimaryText}>{t.saveChanges}</Text>}
+                  <LinearGradient
+                    colors={['#D4AF37', '#FFD700']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.btnPrimaryGradient}
+                  >
+                    {saving
+                      ? <ActivityIndicator size="small" color="#fff" />
+                      : <Text style={styles.btnPrimaryText}>{t.saveChanges}</Text>}
+                  </LinearGradient>
                 </Pressable>
               </View>
             </ScrollView>
@@ -372,24 +473,28 @@ export default function LawyerProfilePage() {
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.privacy}</Text>
+            {/* Action Cards for Privacy */}
             {[
               { icon: 'lock-closed-outline', title: 'Data Encryption', desc: 'All your personal data is encrypted in transit and at rest.' },
               { icon: 'eye-off-outline', title: 'Data Privacy', desc: 'We never sell your personal information to third parties.' },
               { icon: 'shield-checkmark-outline', title: 'Account Security', desc: 'Use a strong password and keep your credentials private.' },
-              { icon: 'trash-outline', title: 'Delete Account', desc: 'Contact support to permanently delete your account and data.' },
             ].map((item, i) => (
-              <View key={i} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
-                <View style={[styles.infoIconBox, { backgroundColor: C.accentLight }]}>
-                  <Ionicons name={item.icon} size={20} color={C.accent} />
+              <View key={i} style={[styles.actionCard, { backgroundColor: '#1A1A1A' }]}>
+                <View style={styles.infoIconBox}>
+                  <Ionicons name={item.icon} size={18} color={C.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
                   <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
                 </View>
+                <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable style={[styles.btnPrimary, { backgroundColor: C.accent, marginTop: 20, flex: 0, alignSelf: 'stretch' }]} onPress={() => setPrivacyOpen(false)}>
-              <Text style={styles.btnPrimaryText}>{t.close}</Text>
+            <Pressable 
+              style={({ pressed }) => [styles.btnCloseModern, { borderColor: C.border }, pressed && { opacity: 0.7 }]} 
+              onPress={() => setPrivacyOpen(false)}
+            >
+              <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
@@ -402,24 +507,29 @@ export default function LawyerProfilePage() {
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.help}</Text>
+            {/* Action Cards for Help */}
             {[
               { icon: 'chatbubble-ellipses-outline', title: 'Contact Support', desc: 'Reach us at support@lawyerup.tn for any issues.' },
               { icon: 'help-circle-outline', title: 'FAQ', desc: 'Find answers to common questions in our Help Center.' },
               { icon: 'document-text-outline', title: 'Terms of Service', desc: 'Review our terms at lawyerup.tn/terms.' },
               { icon: 'information-circle-outline', title: 'App Version', desc: 'LawyerUp v1.0.0 — Keep the app updated for the best experience.' },
             ].map((item, i) => (
-              <View key={i} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
-                <View style={[styles.infoIconBox, { backgroundColor: C.accentLight }]}>
-                  <Ionicons name={item.icon} size={20} color={C.accent} />
+              <View key={i} style={[styles.actionCard, { backgroundColor: '#1A1A1A' }]}>
+                <View style={styles.infoIconBox}>
+                  <Ionicons name={item.icon} size={18} color={C.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
                   <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
                 </View>
+                <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable style={[styles.btnPrimary, { backgroundColor: C.accent, marginTop: 20, flex: 0, alignSelf: 'stretch' }]} onPress={() => setHelpOpen(false)}>
-              <Text style={styles.btnPrimaryText}>{t.close}</Text>
+            <Pressable 
+              style={({ pressed }) => [styles.btnCloseModern, { borderColor: C.border }, pressed && { opacity: 0.7 }]} 
+              onPress={() => setHelpOpen(false)}
+            >
+              <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
@@ -427,42 +537,87 @@ export default function LawyerProfilePage() {
 
       {/* ── Password Change Modal ── */}
       <Modal visible={pwdOpen} animationType="slide" transparent onRequestClose={() => setPwdOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setPwdOpen(false)} />
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <Pressable style={styles.modalBackdrop} onPress={() => { setPwdOpen(false); setFocusedField(null); }} />
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.changePasswordTitle}</Text>
 
             <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.currentPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={currentPwd} onChangeText={setCurrentPwd}
-              placeholder="Enter current password" placeholderTextColor={C.mutedForeground}
+            <MemoizedGlassInput
+              icon="lock"
+              value={currentPwd}
+              onChangeText={setCurrentPwd}
+              onFocus={() => setFocusedField('curPwd')}
+              onBlur={() => setFocusedField(null)}
+              isFocused={focusedField === 'curPwd'}
               secureTextEntry
+              styles={styles}
+              C={C}
             />
+
             <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.newPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={newPwd} onChangeText={setNewPwd}
-              placeholder="min. 6 characters" placeholderTextColor={C.mutedForeground}
+            <MemoizedGlassInput
+              icon="shield"
+              value={newPwd}
+              onChangeText={setNewPwd}
+              onFocus={() => setFocusedField('newPwd')}
+              onBlur={() => setFocusedField(null)}
+              isFocused={focusedField === 'newPwd'}
               secureTextEntry
+              styles={styles}
+              C={C}
             />
+            
+            <View style={styles.pwdStrengthContainer}>
+              <View style={[styles.pwdBar, { backgroundColor: C.border }]}>
+                <View style={[
+                  styles.pwdBarFill, 
+                  { 
+                    width: `${Math.min(100, (newPwd.length / 10) * 100)}%`,
+                    backgroundColor: newPwd.length < 6 ? C.destructive : C.accent 
+                  }
+                ]} />
+              </View>
+              <Text style={[styles.pwdText, { color: C.textSecondary }]}>
+                {newPwd.length < 6 ? 'Too short' : 'Secure'}
+              </Text>
+            </View>
+
             <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.confirmNewPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={confirmPwd} onChangeText={setConfirmPwd}
-              placeholder="Repeat new password" placeholderTextColor={C.mutedForeground}
+            <MemoizedGlassInput
+              icon="check-circle"
+              value={confirmPwd}
+              onChangeText={setConfirmPwd}
+              onFocus={() => setFocusedField('confPwd')}
+              onBlur={() => setFocusedField(null)}
+              isFocused={focusedField === 'confPwd'}
               secureTextEntry
+              styles={styles}
+              C={C}
             />
+
             <View style={styles.sheetActions}>
-              <Pressable style={[styles.btnOutline, { borderColor: C.border }]} onPress={() => setPwdOpen(false)}>
-                <Text style={[styles.btnOutlineText, { color: C.foreground }]}>{t.cancel}</Text>
+              <Pressable style={styles.btnGhostGold} onPress={() => setPwdOpen(false)}>
+                <Text style={[styles.btnGhostText, { color: C.accent }]}>{t.cancel}</Text>
               </Pressable>
               <Pressable
-                style={[styles.btnPrimary, { backgroundColor: C.accent }, pwdSaving && { opacity: 0.7 }]}
-                onPress={handlePwdChange} disabled={pwdSaving}
+                onPress={handlePwdChange}
+                disabled={pwdSaving}
+                style={({ pressed }) => [styles.btnPrimaryWrapper, pwdSaving && { opacity: 0.7 }, pressed && { opacity: 0.9 }]}
               >
-                {pwdSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnPrimaryText}>{t.updatePasswordBtn}</Text>}
+                <LinearGradient
+                  colors={['#D4AF37', '#FFD700']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.btnPrimaryGradient}
+                >
+                  {pwdSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnPrimaryText}>{t.updatePasswordBtn}</Text>}
+                </LinearGradient>
               </Pressable>
             </View>
           </View>
@@ -474,59 +629,82 @@ export default function LawyerProfilePage() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  profileHeader: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
-  avatarWrapper: { position: 'relative', marginBottom: 14 },
-  avatarLarge: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  avatarLargeText: { fontSize: 28, fontFamily: 'Inter_700Bold' },
-  avatarEdit: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  profileName: { fontSize: 22, fontFamily: 'Inter_700Bold' },
-  profileEmail: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 4 },
-  profilePhone: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  profileSpec: { fontSize: 13, fontFamily: 'Inter_500Medium', marginTop: 2 },
-  roleBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginTop: 10 },
-  roleBadgeText: { fontSize: 12, fontFamily: 'Inter_600SemiBold' },
-  availBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20, marginTop: 6 },
-  availDot: { width: 6, height: 6, borderRadius: 3 },
-  availBadgeText: { fontSize: 12, fontFamily: 'Inter_500Medium' },
-  availRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  availLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  availIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  availTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  availSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  settingsCard: { marginHorizontal: 20, borderRadius: 14, padding: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, marginBottom: 16 },
-  sectionTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 },
-  themeRow: { flexDirection: 'row', gap: 10 },
-  themeOption: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, gap: 6 },
-  themeLabel: { fontSize: 12, fontFamily: 'Inter_500Medium' },
-  languageList: { gap: 0 },
-  languageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
-  languageLabel: { fontSize: 15, fontFamily: 'Inter_500Medium' },
-  menuCard: { marginHorizontal: 20, borderRadius: 14, overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, marginBottom: 20 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  menuLabel: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium' },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5 },
-  logoutText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  version: { textAlign: 'center', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 20 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingVertical: 14 },
-  infoIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 2 },
-  infoTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
-  infoDesc: { fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 18 },
-  // Modal
+  headerSimple: { paddingHorizontal: 20, paddingTop: 10, marginBottom: 20 },
+  headerSimpleTop: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  avatarWrapperSimple: { position: 'relative' },
+  avatarRing: { padding: 3, borderRadius: 100, borderWidth: 2 },
+  statusDotOverlay: { position: 'absolute', top: 5, right: 5, width: 14, height: 14, borderRadius: 7, borderWidth: 2.5 },
+  avatarEditSmall: { position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderColor: '#fff', borderWidth: 2 },
+  headerInfoSimple: { flex: 1 },
+  profileNameLarge: { fontSize: 24, fontFamily: 'Inter_700Bold' },
+  profileEmailSmall: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  profileSpecSmall: { fontSize: 13, fontFamily: 'Inter_500Medium', marginTop: 2 },
+
+  // Preferences Card
+  preferencesCard: { marginHorizontal: 20, borderRadius: 24, padding: 4, marginBottom: 20, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  prefRowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
+  prefLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  prefLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  dividerFull: { height: 1, marginHorizontal: 20, opacity: 0.6 },
+  themeToggleCompact: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 20, padding: 2 },
+  themeIconPill: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+
+  // Language...
+  languagePillCard: { marginHorizontal: 20, borderRadius: 20, padding: 12, marginBottom: 24 },
+  pillScroll: { flexDirection: 'row', gap: 8 },
+  langPillCompact: { flex: 1, paddingVertical: 10, borderRadius: 14, alignItems: 'center' },
+  langPillTextSmall: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+
+  // Grouped Menu
+  menuSection: { marginBottom: 20 },
+  menuSectionTitle: { marginHorizontal: 24, fontSize: 12, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', marginBottom: 8 },
+  menuGroupCard: { marginHorizontal: 20, borderRadius: 20, overflow: 'hidden' },
+  menuRowSimple: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  menuLabelSimple: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium' },
+
+  signOutBtnRed: { borderRadius: 16, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5 },
+  signOutTextRed: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+
+  version: { textAlign: 'center', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 24, marginBottom: 40 },
+  
+  // Modal Aesthetics
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 12 },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', marginBottom: 20 },
-  fieldLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
-  input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 16 },
-  textArea: { height: 90, textAlignVertical: 'top' },
-  sheetActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
-  btnOutline: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5 },
-  btnOutlineText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  btnPrimary: { flex: 2, alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
-  btnPrimaryText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#fff' },
-  pickerBtn: { flexDirection: 'row', alignItems: 'center' },
-  inlineDropdown: { borderWidth: 1, borderRadius: 12, marginTop: -12, marginBottom: 16, overflow: 'hidden' },
-  dropdownOption: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
-  dropdownOptionText: { fontSize: 15, fontFamily: 'Inter_400Regular' },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 16 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  fieldLabel: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, opacity: 0.6 },
+  // Glassmorphism Inputs
+  glassInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderRadius: 16, borderWidth: 1.5, borderColor: 'rgba(212, 175, 55, 0.1)', marginBottom: 20, paddingHorizontal: 16 },
+  glassInputFocused: { borderColor: '#D4AF37', elevation: 4, shadowColor: '#D4AF37', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  inputIcon: { marginRight: 12 },
+  glassInput: { flex: 1, paddingVertical: 14, fontSize: 15, fontFamily: 'Inter_400Regular' },
+  glassTextAreaWrapper: { alignItems: 'flex-start', paddingVertical: 4 },
+  glassTextArea: { height: 100, textAlignVertical: 'top' },
+
+  // Chips
+  chipScroll: { marginBottom: 20 },
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(212, 175, 55, 0.2)', marginRight: 8 },
+  chipText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+
+  // Pwd Security
+  pwdStrengthContainer: { marginBottom: 20, gap: 6 },
+  pwdBar: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  pwdBarFill: { height: '100%', borderRadius: 2 },
+  pwdText: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase' },
+
+  sheetActions: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  btnGhostGold: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(212, 175, 55, 0.4)', alignItems: 'center', justifyContent: 'center' },
+  btnGhostText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  btnPrimaryWrapper: { flex: 2, borderRadius: 12, overflow: 'hidden' },
+  btnPrimaryGradient: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  btnPrimaryText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#fff' },
+
+  actionCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, marginBottom: 10 },
+  infoIconBox: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  infoTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  infoDesc: { fontSize: 13, fontFamily: 'Inter_400Regular', opacity: 0.6 },
+
+  btnCloseModern: { marginTop: 20, paddingVertical: 14, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  btnCloseText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
 });

@@ -42,7 +42,7 @@ function ClassicTabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: t.home, tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} /> }} />
       <Tabs.Screen name="cases" options={{ title: t.cases, tabBarIcon: ({ color, size }) => <Ionicons name="folder" size={size} color={color} /> }} />
-      <Tabs.Screen name="requests" options={{ title: t.requests || 'Requests', tabBarIcon: ({ color, size }) => <Ionicons name="mail" size={size} color={color} /> }} />
+
       <Tabs.Screen name="inbox" options={{ title: t.inbox || 'Inbox', tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" size={size} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: t.profile, tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} /> }} />
       
@@ -52,6 +52,7 @@ function ClassicTabLayout() {
       <Tabs.Screen name="inbox-unified" options={{ href: null }} />
       <Tabs.Screen name="all-appointments" options={{ href: null }} />
       <Tabs.Screen name="create-appointment" options={{ href: null }} />
+      <Tabs.Screen name="requests" options={{ href: null }} />
     </Tabs>
   );
 }
