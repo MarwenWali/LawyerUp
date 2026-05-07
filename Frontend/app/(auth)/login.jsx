@@ -32,7 +32,7 @@ export default function LoginPage() {
     Keyboard.dismiss();
     setLoading(true);
     try {
-      const loggedInUser = await login(email.trim(), password);
+      const loggedInUser = await login(email.trim(), password, role);
       const userRole = loggedInUser.role;
       if (userRole === 'admin') {
         // Admin accounts are managed via the web dashboard, not the mobile app.

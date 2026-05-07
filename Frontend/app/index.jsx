@@ -11,6 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { AI_SUGGESTED_QUESTIONS } from '@/constants/mockData';
+import { chatApi } from '@/services/api';
+import VoiceNoteRecorder from '@/components/VoiceNoteRecorder';
 
 function generateAIResponse(question) {
   const q = question.toLowerCase();
@@ -285,6 +287,13 @@ export default function LandingPage() {
 
         <View style={[styles.inputBar, { backgroundColor: C.headerBg, borderTopColor: C.border, paddingBottom: isKeyboardVisible ? 10 : insets.bottom + 8 }]}>
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
+            <VoiceNoteRecorder
+              C={C}
+              floating
+              disabled={isTyping || guestPromptCount >= 3}
+              transcribeAudio={chatApi.transcribeVoice}
+              onTranscribed={(transcript) => sendMessage(transcript)}
+            />
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
               placeholder={guestPromptCount >= 3 ? t.signInToContinue : t.askLegalQuestion}
@@ -435,7 +444,7 @@ const styles = StyleSheet.create({
   dotsRow: { flexDirection: 'row', gap: 5 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   inputBar: { borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 16, paddingRight: 4, paddingVertical: 4, gap: 8 },
+  inputWrapper: { position: 'relative', flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 8, paddingRight: 4, paddingVertical: 4, gap: 8 },
   textInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 10 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
   

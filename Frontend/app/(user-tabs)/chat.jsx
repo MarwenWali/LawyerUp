@@ -17,6 +17,7 @@ import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { AI_SUGGESTED_QUESTIONS } from '@/constants/mockData';
 import { chatApi } from '@/services/api';
+import VoiceNoteRecorder from '@/components/VoiceNoteRecorder';
 
 /** Full-screen image preview modal */
 function ImagePreviewModal({ uri, onClose }) {
@@ -476,7 +477,7 @@ export default function ChatPage() {
               </Pressable>
             </View>
           )}
-          
+
           <View style={[styles.inputWrapper, { backgroundColor: C.background }]}>
             <Pressable onPress={pickDocument} style={styles.attachBtn}>
               <Ionicons name="document-attach-outline" size={22} color={C.mutedForeground} />
@@ -484,6 +485,13 @@ export default function ChatPage() {
             <Pressable onPress={pickImage} style={styles.attachBtn}>
               <Ionicons name="image-outline" size={22} color={C.mutedForeground} />
             </Pressable>
+            <VoiceNoteRecorder
+              C={C}
+              floating
+              disabled={isTyping || loadingMsgs || !activeSession}
+              transcribeAudio={chatApi.transcribeVoice}
+              onTranscribed={(transcript) => sendMessage(transcript)}
+            />
 
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
@@ -554,7 +562,7 @@ const styles = StyleSheet.create({
   suggestionPill: { borderWidth: 1, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   suggestionText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
   inputBar: { borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 4, paddingRight: 4, paddingVertical: 4, gap: 8 },
+  inputWrapper: { position: 'relative', flexDirection: 'row', alignItems: 'flex-end', borderRadius: 24, paddingLeft: 4, paddingRight: 4, paddingVertical: 4, gap: 8 },
   attachBtn: { width: 38, height: 38, justifyContent: 'center', alignItems: 'center' },
   textInput: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', maxHeight: 100, paddingVertical: 10 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },

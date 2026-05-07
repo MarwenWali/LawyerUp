@@ -148,6 +148,7 @@ const server = httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('  GET  /api/conversations');
   console.log('  POST /api/conversations');
   console.log('  POST /api/ai/chat          (AI legal assistant proxy)');
+  console.log('  POST /api/ai/transcribe    (Voice note transcription)');
   console.log('  GET  /api/ai/health        (AI engine health check)');
   console.log('\nReady to accept connections.\n');
 });

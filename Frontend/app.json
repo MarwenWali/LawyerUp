@@ -15,12 +15,18 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.lawyerup"
+      "bundleIdentifier": "com.lawyerup",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "LawyerUp uses your microphone to record voice notes for the AI legal chat."
+      }
     },
     "android": {
       "package": "com.lawyerup",
       "softwareKeyboardLayoutMode": "resize",
       "edgeToEdgeEnabled": true,
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#14213D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -40,7 +46,8 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

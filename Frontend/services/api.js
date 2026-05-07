@@ -13,12 +13,12 @@ const getBaseUrl = () => {
     const hostUri = Constants.expoConfig?.hostUri;
     if (hostUri) {
       const host = hostUri.split(':')[0]; // strip port
-      return `http://${host}:3000`;
+      return `http://${host}:3001`;
     }
     // Android emulator default
-    return 'http://10.0.2.2:3000';
+    return 'http://10.0.2.2:3001';
   }
-  return 'http://localhost:3000';
+  return 'http://localhost:3001';
 };
 
 export const BASE_URL = getBaseUrl();
@@ -76,7 +76,7 @@ export const api = {
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (email, password) => api.post('/api/auth/login', { email, password }),
+  login: (email, password, role) => api.post('/api/auth/login', { email, password, role }),
   register: (data) => api.post('/api/auth/register', data),
   verify: () => api.get('/api/auth/verify'),
 };
@@ -155,6 +155,16 @@ export const chatApi = {
   updateTitle: (id, title) => api.patch(`/api/chat/sessions/${id}/title`, { title }),
   getMessages: (id) => api.get(`/api/chat/sessions/${id}/messages`),
   saveMessages: (id, messages) => api.post(`/api/chat/sessions/${id}/messages`, { messages }),
+  transcribeVoice: async ({ blob, name = 'voice-note.webm', type = 'audio/webm' }) => {
+    const formData = new FormData();
+    if (typeof Blob !== 'undefined' && blob instanceof Blob) {
+      formData.append('audio', blob, name);
+    } else {
+      formData.append('audio', { uri: blob.uri, name, type });
+    }
+    const data = await api.upload('/api/ai/transcribe', formData);
+    return data.transcript;
+  },
   askAssistant: (id, content, attachment = null) => {
     if (attachment) {
       const formData = new FormData();

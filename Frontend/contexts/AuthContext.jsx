@@ -63,8 +63,8 @@ export function AuthProvider({ children }) {
     }
   }
 
-  async function login(email, password) {
-    const data = await authApi.login(email, password);
+  async function login(email, password, role) {
+    const data = await authApi.login(email, password, role);
     try {
       await setToken(data.token);
       // Attempt to sync Supabase session, but don't require it for authentication

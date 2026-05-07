@@ -6,11 +6,84 @@
  * Authenticated users get the same experience; auth is optional here.
  */
 import express from 'express';
+import multer from 'multer';
+import { GoogleGenAI } from '@google/genai';
 import { getAIResponse } from '../services/aiEngine.js';
 import { askRAG } from '../controllers/aiController.js';
 import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
+let geminiAi;
+
+function getGeminiAi() {
+  if (!geminiAi) {
+    geminiAi = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: { timeout: 30000 },
+    });
+  }
+  return geminiAi;
+}
+
+async function transcribeWithGemini(file) {
+  let lastError;
+  const transcriptionModels = [
+    process.env.GEMINI_TRANSCRIPTION_MODEL || 'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash-lite',
+  ];
+  const ai = getGeminiAi();
+  const models = [...new Set(transcriptionModels.filter(Boolean))];
+
+  for (const model of models) {
+    try {
+      const result = await ai.models.generateContent({
+        model,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                text:
+                  'Transcribe the spoken words in this audio file. Return only the transcript text. If there is no speech, return an empty string.',
+              },
+              {
+                inlineData: {
+                  data: file.buffer.toString('base64'),
+                  mimeType: file.mimetype || 'audio/webm',
+                },
+              },
+            ],
+          },
+        ],
+        config: {
+          temperature: 0,
+        },
+      });
+
+      return String(result.text || '').trim();
+    } catch (err) {
+      const errMsg = String(err?.message || err?.toString() || '');
+      const errStatus = err?.status || err?.httpStatusCode || err?.code;
+      lastError = err;
+
+      const isRetryable =
+        errStatus === 429 ||
+        errStatus === 503 ||
+        errStatus === 404 ||
+        /429|quota|rate.?limit|resource.?exhausted|overload|not.?found|unavailable/i.test(errMsg);
+
+      if (!isRetryable) throw err;
+      console.warn(`[AI Transcribe] Gemini model ${model} failed; trying fallback.`, errMsg.slice(0, 200));
+    }
+  }
+
+  throw lastError;
+}
 
 /**
  * POST /api/ai/chat
@@ -36,6 +109,39 @@ router.post('/chat', async (req, res) => {
     // Return a user-friendly message instead of a 500
     return res.status(502).json({
       error: 'AI assistant is unavailable right now. Please try again in a moment.',
+      detail: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
+  }
+});
+
+/**
+ * POST /api/ai/transcribe
+ * Multipart body: audio=<webm|mp4|mpeg|mp3|m4a|wav file>
+ * Returns: { transcript: string }
+ *
+ * The server keeps the upload in memory only, sends it to Gemini for
+ * transcription, and drops the buffer when the request finishes.
+ */
+router.post('/transcribe', optionalAuth, upload.single('audio'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'audio file is required' });
+  }
+
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the backend' });
+  }
+
+  try {
+    const transcript = await transcribeWithGemini(req.file);
+    if (!transcript) {
+      return res.status(422).json({ error: 'No speech was detected in the recording' });
+    }
+
+    return res.json({ transcript });
+  } catch (err) {
+    console.error('[AI Transcribe] Error:', err);
+    return res.status(502).json({
+      error: 'Transcription service is unavailable right now.',
       detail: process.env.NODE_ENV === 'development' ? err.message : undefined,
     });
   }
