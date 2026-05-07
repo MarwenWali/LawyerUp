@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, FlatList, Platform, ActivityIndicator, Image, Linking, Modal, Dimensions, ActionSheetIOS, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';

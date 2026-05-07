@@ -1,4 +1,4 @@
-import { Tabs } from "expo-router";
+﻿import { Tabs } from "expo-router";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { Ionicons } from "@expo/vector-icons";

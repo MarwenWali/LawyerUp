@@ -25,8 +25,8 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r-0">
       <div className="p-5 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg stat-gradient-3 flex items-center justify-center">
-          <Scale className="w-5 h-5 text-primary" />
+        <div className="w-9 h-9 rounded-[10px] bg-[#D29940] flex items-center justify-center">
+          <Scale className="w-[18px] h-[18px] text-[#1D2A3B]" />
         </div>
         <span className="font-heading font-bold text-lg text-sidebar-foreground">LawyerUp</span>
       </div>

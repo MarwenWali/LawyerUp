@@ -47,7 +47,7 @@ export async function getAllCases(req, res) {
         createdAt: c.created_at,
         updatedAt: c.updated_at,
         ...(req.user.role === 'lawyer'
-          ? { userName: c.user_name, userEmail: c.user_email }
+          ? { userId: c.user_id, userName: c.user_name, userEmail: c.user_email }
           : { lawyerId: c.lawyer_id, lawyerName: c.lawyer_name ? `Maître ${c.lawyer_name}` : null }
         ),
       })),

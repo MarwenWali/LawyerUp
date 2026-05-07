@@ -10,6 +10,7 @@ import multer from 'multer';
 import { GoogleGenAI } from '@google/genai';
 import { getAIResponse } from '../services/aiEngine.js';
 import { askRAG } from '../controllers/aiController.js';
+import { generatePublicReply } from '../controllers/ai.js';
 import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -90,6 +91,8 @@ async function transcribeWithGemini(file) {
  * Body: { message: string, history?: Array<{ sender: string, content: string }> }
  * Returns: { response: string }
  */
+router.post('/reply', generatePublicReply);
+
 router.post('/chat', async (req, res) => {
   const message = String(req.body?.message || '').trim();
 

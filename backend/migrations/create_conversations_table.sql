@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   citizen_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   lawyer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type VARCHAR(30) NOT NULL DEFAULT 'lawyer_user' CHECK (type IN ('lawyer_user', 'admin_lawyer')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   status conversation_status DEFAULT 'active',
@@ -31,6 +32,7 @@ BEGIN
   ) THEN
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS citizen_id UUID;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS lawyer_id UUID;
+    ALTER TABLE conversations ADD COLUMN IF NOT EXISTS type VARCHAR(30) DEFAULT 'lawyer_user';
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
     ALTER TABLE conversations ADD COLUMN IF NOT EXISTS status conversation_status DEFAULT 'active';
@@ -50,6 +52,17 @@ BEGIN
     UPDATE conversations
     SET last_message_at = COALESCE(last_message_at, created_at, CURRENT_TIMESTAMP)
     WHERE last_message_at IS NULL;
+
+    UPDATE conversations
+    SET type = 'lawyer_user'
+    WHERE type IS NULL;
+
+    ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'lawyer_user';
+    ALTER TABLE conversations ALTER COLUMN type SET NOT NULL;
+    ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_type_check;
+    ALTER TABLE conversations
+      ADD CONSTRAINT conversations_type_check
+      CHECK (type IN ('lawyer_user', 'admin_lawyer'));
 
     ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_citizen_id_fkey;
     ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_lawyer_id_fkey;

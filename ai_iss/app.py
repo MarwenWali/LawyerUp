@@ -6,9 +6,39 @@ Fine-tuned for understanding Tunisian Arabic (Darija), French, and Arabic
 from router import handle_request
 import sys
 import logging
+import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _normalize_response_text(text: str) -> str:
+    """Collapse accidental immediate duplicates in response text."""
+    if not text:
+        return text
+
+    def collapse_line(line: str) -> str:
+        stripped = line.strip()
+        if not stripped:
+            return line
+
+        # Handle exact doubled line content: "X.X." -> "X."
+        doubled_match = re.fullmatch(r"(.+)\1", stripped)
+        if doubled_match:
+            return doubled_match.group(1).strip()
+
+        return line
+
+    lines = [collapse_line(line) for line in text.splitlines()]
+
+    # Remove adjacent duplicate lines.
+    deduped = []
+    for line in lines:
+        if deduped and line.strip() and line.strip() == deduped[-1].strip():
+            continue
+        deduped.append(line)
+
+    return "\n".join(deduped).strip()
 
 def main():
     print("\n" + "=" * 70)
@@ -42,6 +72,7 @@ def main():
             # Process request
             logger.info(f"Processing query: {user_input[:50]}...")
             response = handle_request(user_input)
+            response = _normalize_response_text(response)
             
             print(f"\n🤖 المساعد / Assistant:\n{response}\n")
             

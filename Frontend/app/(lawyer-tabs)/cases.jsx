@@ -3,10 +3,12 @@ import { View, Text, TextInput, Pressable, StyleSheet, FlatList, ScrollView, Mod
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useTheme } from '@/constants/useTheme';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { casesApi } from '@/services/api';
 import { useLocalSearchParams } from 'expo-router';
+import { messageService } from '@/src/services/messageService';
 
 export default function CasesPage() {
   const insets = useSafeAreaInsets();
@@ -67,6 +69,32 @@ export default function CasesPage() {
     }
   }
 
+  const handleMessageCase = useCallback(async (caseItem) => {
+    if (!caseItem?.userId) {
+      Alert.alert('Error', 'Missing client information for this case.');
+      return;
+    }
+
+    try {
+      const payload = await messageService.startConversation({ participantId: caseItem.userId });
+      const conversationId = payload?.conversation?.id || payload?.conversation?.conversation_id || payload?.conversationId;
+
+      if (!conversationId) {
+        throw new Error('Could not open chat');
+      }
+
+      router.push({
+        pathname: '/(messaging)/chat',
+        params: {
+          conversationId,
+          title: caseItem.userName || 'Conversation',
+        },
+      });
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to open chat.');
+    }
+  }, []);
+
 function formatTimeAgo(dateStr, t) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const hours = Math.floor(diff / 3600000);
@@ -74,7 +102,7 @@ function formatTimeAgo(dateStr, t) {
   return `${Math.floor(hours / 24)}${t.dAgo}`;
 }
 
-function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
+function CaseCard({ c, onPress, onAccept, onReject, onMessage, C, t }) {
   const PRIORITY_COLORS = { low: C.mutedForeground, medium: C.warning, high: C.destructive };
   const STATUS_COLORS = { pending: C.warning, accepted: C.tint, completed: C.success, rejected: C.destructive };
 
@@ -116,7 +144,10 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
       )}
       {c.status === 'accepted' && (
         <View style={styles.caseBtns}>
-          <Pressable style={({ pressed }) => [styles.msgBtn, { borderColor: C.tint }, pressed && { opacity: 0.7 }]}>
+          <Pressable
+            style={({ pressed }) => [styles.msgBtn, { borderColor: C.tint }, pressed && { opacity: 0.7 }]}
+            onPress={onMessage}
+          >
             <Feather name="message-circle" size={16} color={C.tint} />
             <Text style={[styles.msgBtnText, { color: C.tint }]}>{t.message}</Text>
           </Pressable>
@@ -158,7 +189,17 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
 
         <FlatList
           data={filtered}
-          renderItem={({ item }) => <CaseCard c={item} onPress={() => setSelectedCase(item)} onAccept={() => handleUpdateStatus(item.id, 'accepted')} onReject={() => handleUpdateStatus(item.id, 'rejected')} C={C} t={t} />}
+          renderItem={({ item }) => (
+            <CaseCard
+              c={item}
+              onPress={() => setSelectedCase(item)}
+              onAccept={() => handleUpdateStatus(item.id, 'accepted')}
+              onReject={() => handleUpdateStatus(item.id, 'rejected')}
+              onMessage={() => handleMessageCase(item)}
+              C={C}
+              t={t}
+            />
+          )}
           keyExtractor={c => c.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: 12 }}
           showsVerticalScrollIndicator={false}

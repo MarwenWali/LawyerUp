@@ -9,35 +9,38 @@ export const messagingApi = {
     return data;
   },
 
-  createConversation: (type, targetUserId) =>
-    api.post('/api/conversations', {
+  createConversation: (typeOrTargetUserId, maybeTargetUserId) => {
+    const targetUserId = maybeTargetUserId || typeOrTargetUserId;
+    return api.post('/api/conversations', {
       participantId: targetUserId,
-    }),
+    });
+  },
 
-  listConversations: (type) =>
+  listConversations: () =>
     api.get('/api/conversations'),
 
-  listMessages: (conversationId, { limit = 30, before } = {}) =>
-    api.get(`/api/conversations/${conversationId}/messages?limit=${limit}`),
+  listMessages: (conversationId, { page = 1, limit = 30, before } = {}) => {
+    const qs = before
+      ? `limit=${limit}&before=${encodeURIComponent(before)}`
+      : `page=${page}&limit=${limit}`;
+    return api.get(`/api/conversations/${conversationId}/messages?${qs}`);
+  },
 
-  sendMessage: ({ conversationId, content }) =>
+  sendMessage: ({ conversationId, content, clientMessageId = null }) =>
     api.post(`/api/conversations/${conversationId}/messages`, {
       content,
+      clientMessageId,
     }),
 
-  /**
-   * Send a message with an optional file attachment.
-   * Uses multipart/form-data so the file bytes reach the backend.
-   */
   sendMessageWithAttachment: async ({ conversationId, content, attachment }) => {
     const token = await getToken();
-
     const formData = new FormData();
+
     if (content && content.trim()) {
       formData.append('content', content.trim());
     }
+
     if (attachment) {
-      // React Native FormData expects { uri, name, type }
       formData.append('attachment', {
         uri: attachment.uri,
         name: attachment.name || 'attachment',

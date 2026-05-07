@@ -45,3 +45,8 @@ ai_iss/models/
 ai_iss/legal-model/
 ai_iss/__pycache__/
 ai_iss/**/*.pyc
+
+# Python virtual environments
+.venv/
+**/.venv/
+venv/

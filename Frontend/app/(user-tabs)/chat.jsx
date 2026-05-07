@@ -1,4 +1,4 @@
-// ── FULL REWRITE: chat with session history ──────────────────────────────────
+﻿// ── FULL REWRITE: chat with session history ──────────────────────────────────
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet, FlatList,
