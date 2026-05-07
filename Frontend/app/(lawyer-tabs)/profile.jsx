@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useCallback } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView, Platform,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Alert, Image, Switch,
@@ -18,39 +18,8 @@ import { SPECIALIZATION_OPTIONS } from '@/constants/mockData';
 import ProfileImage from '@/components/ProfileImage';
 import StatusAvatar from '@/components/StatusAvatar';
 
-// ── Memoized Components to prevent cursor jumping ─────────────────────────
-const MemoizedGlassInput = memo(({ 
-  icon, 
-  value, 
-  onChangeText, 
-  placeholder, 
-  secureTextEntry, 
-  keyboardType, 
-  onFocus, 
-  onBlur, 
-  isFocused, 
-  multiline,
-  styles,
-  C
-}) => (
-  <View style={[styles.glassInputWrapper, isFocused && styles.glassInputFocused]}>
-    {icon && <Feather name={icon} size={18} color={isFocused ? C.accent : 'rgba(212,175,55,0.4)'} style={styles.inputIcon} />}
-    <TextInput
-      style={[styles.glassInput, multiline && styles.glassTextArea, { color: C.foreground }]}
-      value={value}
-      onChangeText={onChangeText}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      placeholder={placeholder}
-      placeholderTextColor={C.mutedForeground}
-      secureTextEntry={secureTextEntry}
-      keyboardType={keyboardType}
-      multiline={multiline}
-      cursorColor={C.accent}
-      selectionColor={C.accent + '44'}
-    />
-  </View>
-));
+import LawyerEditProfileModal from '@/components/LawyerEditProfileModal';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 export default function LawyerProfilePage() {
   const { user, logout, updateUser, uploadPhoto } = useAuth();
@@ -58,39 +27,22 @@ export default function LawyerProfilePage() {
   const C = useTheme();
   const { themeMode, toggleTheme } = useThemeContext();
   const { language, t, changeLanguage, availableLanguages } = useLanguage();
-  const displayName = user?.name || 'Lawyer';
-  const initials = displayName.replace('Maître ', '').split(' ').map(n => n[0]).join('').slice(0, 2);
+  const displayName = user?.name || 'Maître Lawyer';
 
-  // ── Edit modal state ──────────────────────────────────────────────────
+  // ── Modal Visibility ──────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
-  const [draftName, setDraftName] = useState('');
-  const [draftPhone, setDraftPhone] = useState('');
-  const [draftBio, setDraftBio] = useState('');
-  const [draftSpec, setDraftSpec] = useState('Family');
-  const [draftExp, setDraftExp] = useState('');
-  const [specPickerOpen, setSpecPickerOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // ── Password change state ───────────────────────────────────────────────
   const [pwdOpen, setPwdOpen] = useState(false);
-  const [currentPwd, setCurrentPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
-  const [pwdSaving, setPwdSaving] = useState(false);
-
-  // ── Photo upload state ──────────────────────────────────────────────────
-  const [photoLoading, setPhotoLoading] = useState(false);
-
-  // ── Info modals ───────────────────────────────────────────────────────────
   const [helpOpen, setHelpOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
 
-  // ── Focus state for inputs ──────────────────────────────────────────────
-  const [focusedField, setFocusedField] = useState(null);
-
-  // ── Availability state ─────────────────────────────────────────────────
-  const [isAvailable, setIsAvailable] = useState(true);
+  // ── Loading States ────────────────────────────────────────────────────
+  const [saving, setSaving] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [availLoading, setAvailLoading] = useState(false);
+
+  // ── Availability ──────────────────────────────────────────────────────
+  const [isAvailable, setIsAvailable] = useState(true);
 
   useEffect(() => {
     if (user?.id) {
@@ -141,46 +93,15 @@ export default function LawyerProfilePage() {
     }
   }
 
-  async function handlePwdChange() {
-    if (!currentPwd || !newPwd || !confirmPwd) { Alert.alert('', 'All fields are required.'); return; }
-    if (newPwd !== confirmPwd) { Alert.alert('', 'New passwords do not match.'); return; }
-    if (newPwd.length < 6) { Alert.alert('', 'Password must be at least 6 characters.'); return; }
-    try {
-      setPwdSaving(true);
-      await userApi.changePassword({ currentPassword: currentPwd, newPassword: newPwd });
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Password changed successfully.');
-      setPwdOpen(false);
-      setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to change password.');
-    } finally {
-      setPwdSaving(false);
-    }
-  }
-
-  function openEdit() {
-    setDraftName(user?.name || '');
-    setDraftPhone(user?.phone_number || '');
-    setDraftBio(user?.bio || '');
-    setDraftSpec(user?.specialization || 'Family');
-    setDraftExp(user?.experience_years != null ? String(user.experience_years) : '');
-    setEditOpen(true);
-  }
-
-  async function saveEdit() {
-    if (!draftName.trim()) {
-      Alert.alert('', 'Full name cannot be empty.');
-      return;
-    }
+  async function onSaveProfile(data) {
     try {
       setSaving(true);
       await updateUser({
-        full_name: draftName.trim(),
-        phone_number: draftPhone.trim() || null,
-        bio: draftBio.trim() || null,
-        specialization: draftSpec || null,
-        experience_years: parseInt(draftExp) || 0,
+        full_name: data.full_name.trim(),
+        phone_number: data.phone_number.trim() || null,
+        bio: data.bio.trim() || null,
+        specialization: data.specialization || null,
+        experience_years: parseInt(data.experience_years) || 0,
       });
       setEditOpen(false);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -191,6 +112,23 @@ export default function LawyerProfilePage() {
     }
   }
 
+  async function onSavePassword(data) {
+    try {
+      setPwdSaving(true);
+      await userApi.changePassword({ 
+        currentPassword: data.currentPassword, 
+        newPassword: data.newPassword 
+      });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'Password changed successfully.');
+      setPwdOpen(false);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to change password.');
+    } finally {
+      setPwdSaving(false);
+    }
+  }
+
   async function handleLogout() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
@@ -198,7 +136,7 @@ export default function LawyerProfilePage() {
   }
 
   const accountItems = [
-    { icon: 'person-outline', label: t.editProfile, onPress: openEdit },
+    { icon: 'person-outline', label: t.editProfile, onPress: () => setEditOpen(true) },
     { icon: 'lock-closed-outline', label: t.changePasswordTitle, onPress: () => setPwdOpen(true) },
     { icon: 'document-text-outline', label: t.certifications },
   ];
@@ -208,10 +146,9 @@ export default function LawyerProfilePage() {
     { icon: 'help-circle-outline', label: t.help, onPress: () => setHelpOpen(true) },
   ];
 
-  // Ensure Tounsi is first
   const sortedLanguages = [...availableLanguages].sort((a, b) => {
     if (a.key === 'ar') return -1;
-    if (b.key === 'ar') return 1;
+    if (a.key === 'ar') return 1;
     return 0;
   });
 
@@ -221,7 +158,6 @@ export default function LawyerProfilePage() {
         showsVerticalScrollIndicator={false} 
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 60 }}
       >
-        {/* ── 1. Header with Status Dot ── */}
         <View style={styles.headerSimple}>
           <View style={styles.headerSimpleTop}>
             <StatusAvatar 
@@ -239,7 +175,6 @@ export default function LawyerProfilePage() {
           </View>
         </View>
 
-        {/* ── 2. Unified Preferences Row ── */}
         <View style={[styles.preferencesCard, { backgroundColor: C.card }]}>
           <View style={styles.prefRowItem}>
             <View style={styles.prefLeft}>
@@ -255,9 +190,7 @@ export default function LawyerProfilePage() {
               style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
             />
           </View>
-
           <View style={[styles.dividerFull, { backgroundColor: C.border }]} />
-
           <View style={styles.prefRowItem}>
             <View style={styles.prefLeft}>
               <Ionicons name="moon-outline" size={18} color={C.accent} />
@@ -284,7 +217,6 @@ export default function LawyerProfilePage() {
           </View>
         </View>
 
-        {/* ── 3. Horizontal Language Picker ── */}
         <View style={[styles.languagePillCard, { backgroundColor: C.card }]}>
           <View style={styles.pillScroll}>
             {sortedLanguages.map((lang) => {
@@ -308,7 +240,6 @@ export default function LawyerProfilePage() {
           </View>
         </View>
 
-        {/* ── 4. Grouped Menu ── */}
         <View style={styles.menuSection}>
           <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Account Settings</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
@@ -343,7 +274,6 @@ export default function LawyerProfilePage() {
           </View>
         </View>
 
-        {/* ── Sign Out ── */}
         <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
           <Pressable 
             style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]} 
@@ -352,137 +282,48 @@ export default function LawyerProfilePage() {
             <Text style={[styles.signOutTextRed, { color: C.destructive }]}>{t.signOut}</Text>
           </Pressable>
         </View>
-        
         <Text style={[styles.version, { color: C.mutedForeground }]}>LawyerUp v1.0.0</Text>
       </ScrollView>
 
-      {/* ── Edit Profile Modal ── */}
-      <Modal visible={editOpen} animationType="slide" transparent onRequestClose={() => setEditOpen(false)}>
-        <KeyboardAvoidingView 
-          style={styles.modalOverlay} 
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={() => { setEditOpen(false); setFocusedField(null); }} />
-          <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
-            <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.editProfileTitle}</Text>
+      {/* ── Modals ── */}
+      <LawyerEditProfileModal 
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        C={C}
+        t={t}
+        styles={styles}
+        saving={saving}
+        onSave={onSaveProfile}
+        user={user}
+        isDark={themeMode === 'dark'}
+        insets={insets}
+      />
 
-            <ScrollView 
-              showsVerticalScrollIndicator={false} 
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: 20 }}
-            >
-              <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.fullName}</Text>
-              <MemoizedGlassInput
-                icon="user"
-                value={draftName}
-                onChangeText={setDraftName}
-                onFocus={() => setFocusedField('name')}
-                onBlur={() => setFocusedField(null)}
-                isFocused={focusedField === 'name'}
-                placeholder="Your full name"
-                styles={styles}
-                C={C}
-              />
+      <ChangePasswordModal 
+        visible={pwdOpen}
+        onClose={() => setPwdOpen(false)}
+        C={C}
+        t={t}
+        styles={styles}
+        pwdSaving={pwdSaving}
+        onSave={onSavePassword}
+        isDark={themeMode === 'dark'}
+        insets={insets}
+      />
 
-              <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.phoneNumber}</Text>
-              <MemoizedGlassInput
-                icon="phone"
-                value={draftPhone}
-                onChangeText={setDraftPhone}
-                onFocus={() => setFocusedField('phone')}
-                onBlur={() => setFocusedField(null)}
-                isFocused={focusedField === 'phone'}
-                placeholder="+216 XX XXX XXX"
-                keyboardType="phone-pad"
-                styles={styles}
-                C={C}
-              />
-
-              <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.specializationLabel}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                {SPECIALIZATION_OPTIONS.map(item => (
-                  <Pressable
-                    key={item}
-                    onPress={() => setDraftSpec(item)}
-                    style={[styles.chip, draftSpec === item && { backgroundColor: C.accent, borderColor: C.accent }]}
-                  >
-                    <Text style={[styles.chipText, { color: C.foreground }, draftSpec === item && { color: '#fff' }]}>{item}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.yearsExpLabel}</Text>
-              <MemoizedGlassInput
-                icon="award"
-                value={draftExp}
-                onChangeText={setDraftExp}
-                onFocus={() => setFocusedField('exp')}
-                onBlur={() => setFocusedField(null)}
-                isFocused={focusedField === 'exp'}
-                placeholder="Years of experience"
-                keyboardType="number-pad"
-                styles={styles}
-                C={C}
-              />
-
-              <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.bioLabel}</Text>
-              <MemoizedGlassInput
-                value={draftBio}
-                onChangeText={setDraftBio}
-                onFocus={() => setFocusedField('bio')}
-                onBlur={() => setFocusedField(null)}
-                isFocused={focusedField === 'bio'}
-                placeholder="About yourself..."
-                multiline
-                styles={styles}
-                C={C}
-              />
-
-              <View style={styles.sheetActions}>
-                <Pressable style={styles.btnGhostGold} onPress={() => setEditOpen(false)}>
-                  <Text style={[styles.btnGhostText, { color: C.accent }]}>{t.cancel}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={saveEdit}
-                  disabled={saving}
-                  style={({ pressed }) => [styles.btnPrimaryWrapper, saving && { opacity: 0.7 }, pressed && { opacity: 0.9 }]}
-                >
-                  <LinearGradient
-                    colors={['#D4AF37', '#FFD700']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.btnPrimaryGradient}
-                  >
-                    {saving
-                      ? <ActivityIndicator size="small" color="#fff" />
-                      : <Text style={styles.btnPrimaryText}>{t.saveChanges}</Text>}
-                  </LinearGradient>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* ── Privacy & Security Modal ── */}
       <Modal visible={privacyOpen} animationType="slide" transparent onRequestClose={() => setPrivacyOpen(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setPrivacyOpen(false)} />
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.privacy}</Text>
-            {/* Action Cards for Privacy */}
             {[
               { icon: 'lock-closed-outline', title: 'Data Encryption', desc: 'All your personal data is encrypted in transit and at rest.' },
               { icon: 'eye-off-outline', title: 'Data Privacy', desc: 'We never sell your personal information to third parties.' },
               { icon: 'shield-checkmark-outline', title: 'Account Security', desc: 'Use a strong password and keep your credentials private.' },
             ].map((item, i) => (
               <View key={i} style={[styles.actionCard, { backgroundColor: '#1A1A1A' }]}>
-                <View style={styles.infoIconBox}>
-                  <Ionicons name={item.icon} size={18} color={C.accent} />
-                </View>
+                <View style={styles.infoIconBox}><Ionicons name={item.icon} size={18} color={C.accent} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
                   <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
@@ -490,24 +331,19 @@ export default function LawyerProfilePage() {
                 <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable 
-              style={({ pressed }) => [styles.btnCloseModern, { borderColor: C.border }, pressed && { opacity: 0.7 }]} 
-              onPress={() => setPrivacyOpen(false)}
-            >
+            <Pressable style={styles.btnCloseModern} onPress={() => setPrivacyOpen(false)}>
               <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
 
-      {/* ── Help & Support Modal ── */}
       <Modal visible={helpOpen} animationType="slide" transparent onRequestClose={() => setHelpOpen(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setHelpOpen(false)} />
           <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
             <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
             <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.help}</Text>
-            {/* Action Cards for Help */}
             {[
               { icon: 'chatbubble-ellipses-outline', title: 'Contact Support', desc: 'Reach us at support@lawyerup.tn for any issues.' },
               { icon: 'help-circle-outline', title: 'FAQ', desc: 'Find answers to common questions in our Help Center.' },
@@ -515,9 +351,7 @@ export default function LawyerProfilePage() {
               { icon: 'information-circle-outline', title: 'App Version', desc: 'LawyerUp v1.0.0 — Keep the app updated for the best experience.' },
             ].map((item, i) => (
               <View key={i} style={[styles.actionCard, { backgroundColor: '#1A1A1A' }]}>
-                <View style={styles.infoIconBox}>
-                  <Ionicons name={item.icon} size={18} color={C.accent} />
-                </View>
+                <View style={styles.infoIconBox}><Ionicons name={item.icon} size={18} color={C.accent} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
                   <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
@@ -525,103 +359,11 @@ export default function LawyerProfilePage() {
                 <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable 
-              style={({ pressed }) => [styles.btnCloseModern, { borderColor: C.border }, pressed && { opacity: 0.7 }]} 
-              onPress={() => setHelpOpen(false)}
-            >
+            <Pressable style={styles.btnCloseModern} onPress={() => setHelpOpen(false)}>
               <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
-      </Modal>
-
-      {/* ── Password Change Modal ── */}
-      <Modal visible={pwdOpen} animationType="slide" transparent onRequestClose={() => setPwdOpen(false)}>
-        <KeyboardAvoidingView 
-          style={styles.modalOverlay} 
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <Pressable style={styles.modalBackdrop} onPress={() => { setPwdOpen(false); setFocusedField(null); }} />
-          <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
-            <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.changePasswordTitle}</Text>
-
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.currentPasswordLabel}</Text>
-            <MemoizedGlassInput
-              icon="lock"
-              value={currentPwd}
-              onChangeText={setCurrentPwd}
-              onFocus={() => setFocusedField('curPwd')}
-              onBlur={() => setFocusedField(null)}
-              isFocused={focusedField === 'curPwd'}
-              secureTextEntry
-              styles={styles}
-              C={C}
-            />
-
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.newPasswordLabel}</Text>
-            <MemoizedGlassInput
-              icon="shield"
-              value={newPwd}
-              onChangeText={setNewPwd}
-              onFocus={() => setFocusedField('newPwd')}
-              onBlur={() => setFocusedField(null)}
-              isFocused={focusedField === 'newPwd'}
-              secureTextEntry
-              styles={styles}
-              C={C}
-            />
-            
-            <View style={styles.pwdStrengthContainer}>
-              <View style={[styles.pwdBar, { backgroundColor: C.border }]}>
-                <View style={[
-                  styles.pwdBarFill, 
-                  { 
-                    width: `${Math.min(100, (newPwd.length / 10) * 100)}%`,
-                    backgroundColor: newPwd.length < 6 ? C.destructive : C.accent 
-                  }
-                ]} />
-              </View>
-              <Text style={[styles.pwdText, { color: C.textSecondary }]}>
-                {newPwd.length < 6 ? 'Too short' : 'Secure'}
-              </Text>
-            </View>
-
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.confirmNewPasswordLabel}</Text>
-            <MemoizedGlassInput
-              icon="check-circle"
-              value={confirmPwd}
-              onChangeText={setConfirmPwd}
-              onFocus={() => setFocusedField('confPwd')}
-              onBlur={() => setFocusedField(null)}
-              isFocused={focusedField === 'confPwd'}
-              secureTextEntry
-              styles={styles}
-              C={C}
-            />
-
-            <View style={styles.sheetActions}>
-              <Pressable style={styles.btnGhostGold} onPress={() => setPwdOpen(false)}>
-                <Text style={[styles.btnGhostText, { color: C.accent }]}>{t.cancel}</Text>
-              </Pressable>
-              <Pressable
-                onPress={handlePwdChange}
-                disabled={pwdSaving}
-                style={({ pressed }) => [styles.btnPrimaryWrapper, pwdSaving && { opacity: 0.7 }, pressed && { opacity: 0.9 }]}
-              >
-                <LinearGradient
-                  colors={['#D4AF37', '#FFD700']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.btnPrimaryGradient}
-                >
-                  {pwdSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnPrimaryText}>{t.updatePasswordBtn}</Text>}
-                </LinearGradient>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -675,8 +417,8 @@ const styles = StyleSheet.create({
   sheetTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
   fieldLabel: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, opacity: 0.6 },
   // Glassmorphism Inputs
-  glassInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderRadius: 16, borderWidth: 1.5, borderColor: 'rgba(212, 175, 55, 0.1)', marginBottom: 20, paddingHorizontal: 16 },
-  glassInputFocused: { borderColor: '#D4AF37', elevation: 4, shadowColor: '#D4AF37', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  glassInputWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1.5, borderColor: 'rgba(212, 175, 55, 0.1)', marginBottom: 20, paddingHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.03)' },
+  glassInputFocused: { borderColor: '#D4AF37', backgroundColor: 'transparent' },
   inputIcon: { marginRight: 12 },
   glassInput: { flex: 1, paddingVertical: 14, fontSize: 15, fontFamily: 'Inter_400Regular' },
   glassTextAreaWrapper: { alignItems: 'flex-start', paddingVertical: 4 },
@@ -693,7 +435,7 @@ const styles = StyleSheet.create({
   pwdBarFill: { height: '100%', borderRadius: 2 },
   pwdText: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase' },
 
-  sheetActions: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  sheetActionsFull: { flexDirection: 'row', gap: 12, marginTop: 12, paddingHorizontal: 4 },
   btnGhostGold: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(212, 175, 55, 0.4)', alignItems: 'center', justifyContent: 'center' },
   btnGhostText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   btnPrimaryWrapper: { flex: 2, borderRadius: 12, overflow: 'hidden' },

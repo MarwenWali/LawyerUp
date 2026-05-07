@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView, Platform,
   Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Alert, Image,
@@ -13,35 +13,32 @@ import { useTheme } from '@/constants/useTheme';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { userApi } from '@/services/api';
+import { LinearGradient } from 'expo-linear-gradient';
 import ProfileImage from '@/components/ProfileImage';
+import StatusAvatar from '@/components/StatusAvatar';
+
+import PersonalInformationModal from '@/components/PersonalInformationModal';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 export default function ProfilePage() {
   const { user, logout, updateUser, uploadPhoto } = useAuth();
   const insets = useSafeAreaInsets();
   const C = useTheme();
   const { themeMode, toggleTheme } = useThemeContext();
+  const isDark = themeMode === 'dark';
   const { language, t, changeLanguage, availableLanguages } = useLanguage();
   const initials = user?.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || 'U';
 
-  // ── Edit modal state ──────────────────────────────────────────────────────
+  // ── Modal Visibility ──────────────────────────────────────────────────
   const [editOpen, setEditOpen] = useState(false);
-  const [draftName, setDraftName] = useState('');
-  const [draftPhone, setDraftPhone] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // ── Password change state ─────────────────────────────────────────────────
   const [pwdOpen, setPwdOpen] = useState(false);
-  const [currentPwd, setCurrentPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmPwd, setConfirmPwd] = useState('');
-  const [pwdSaving, setPwdSaving] = useState(false);
-
-  // ── Photo upload state ────────────────────────────────────────────────────
-  const [photoLoading, setPhotoLoading] = useState(false);
-
-  // ── Info modals ───────────────────────────────────────────────────────────
   const [helpOpen, setHelpOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+
+  // ── Loading States ────────────────────────────────────────────────────
+  const [saving, setSaving] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [photoLoading, setPhotoLoading] = useState(false);
 
   async function handlePhotoUpload() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -68,47 +65,13 @@ export default function ProfilePage() {
     }
   }
 
-  async function handlePwdChange() {
-    if (!currentPwd || !newPwd || !confirmPwd) {
-      Alert.alert('', 'All fields are required.');
-      return;
-    }
-    if (newPwd !== confirmPwd) {
-      Alert.alert('', 'New passwords do not match.');
-      return;
-    }
-    if (newPwd.length < 6) {
-      Alert.alert('', 'Password must be at least 6 characters.');
-      return;
-    }
-    try {
-      setPwdSaving(true);
-      await userApi.changePassword({ currentPassword: currentPwd, newPassword: newPwd });
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Password changed successfully.');
-      setPwdOpen(false);
-      setCurrentPwd(''); setNewPwd(''); setConfirmPwd('');
-    } catch (e) {
-      Alert.alert('Error', e.message || 'Failed to change password.');
-    } finally {
-      setPwdSaving(false);
-    }
-  }
-
-  function openEdit() {
-    setDraftName(user?.name || '');
-    setDraftPhone(user?.phone_number || '');
-    setEditOpen(true);
-  }
-
-  async function saveEdit() {
-    if (!draftName.trim()) {
-      Alert.alert('', 'Full name cannot be empty.');
-      return;
-    }
+  async function onSaveProfile(data) {
     try {
       setSaving(true);
-      await updateUser({ full_name: draftName.trim(), phone_number: draftPhone.trim() || null });
+      await updateUser({ 
+        full_name: data.full_name.trim(), 
+        phone_number: data.phone_number.trim() || null 
+      });
       setEditOpen(false);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
@@ -118,146 +81,227 @@ export default function ProfilePage() {
     }
   }
 
+  async function onSavePassword(data) {
+    try {
+      setPwdSaving(true);
+      await userApi.changePassword({ 
+        currentPassword: data.currentPassword, 
+        newPassword: data.newPassword 
+      });
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'Password changed successfully.');
+      setPwdOpen(false);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Failed to change password.');
+    } finally {
+      setPwdSaving(false);
+    }
+  }
+
   async function handleLogout() {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
     router.replace('/(auth)/login');
   }
 
-  const menuItems = [
-    { icon: 'person-outline', label: t.personalInfo, onPress: openEdit },
+  const accountItems = [
+    { icon: 'person-outline', label: t.personalInfo, onPress: () => setEditOpen(true) },
     { icon: 'lock-closed-outline', label: t.changePasswordTitle, onPress: () => setPwdOpen(true) },
+  ];
+
+  const legalItems = [
+    { icon: 'document-text-outline', label: t.myDocuments || 'My Documents', onPress: () => router.push('/(user-tabs)/vault') },
+  ];
+
+  const settingItems = [
     { icon: 'shield-checkmark-outline', label: t.privacy, onPress: () => setPrivacyOpen(true) },
     { icon: 'help-circle-outline', label: t.help, onPress: () => setHelpOpen(true) },
   ];
 
+  // Sort languages (ar first)
+  const sortedLanguages = [...availableLanguages].sort((a, b) => {
+    if (a.key === 'ar') return -1;
+    if (b.key === 'ar') return 1;
+    return 0;
+  });
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 100 }}>
-        <View style={styles.profileHeader}>
-          <Pressable onPress={handlePhotoUpload} style={styles.avatarWrapper}>
-            <ProfileImage url={user?.profile_photo_url} size={80} />
-            {photoLoading
-              ? <ActivityIndicator style={styles.avatarEdit} color={C.accent} />
-              : <View style={[styles.avatarEdit, { backgroundColor: C.accent }]}><Feather name="camera" size={14} color="#fff" /></View>
-            }
+        {/* ── 1. Header with StatusAvatar ── */}
+        <View style={styles.headerCard}>
+          <View style={styles.headerTop}>
+            <StatusAvatar 
+              url={user?.profile_photo_url} 
+              size={76} 
+              isAvailable={true} // Citizen always green for now
+              onPhotoPress={handlePhotoUpload}
+              showEditIcon={true}
+            />
+            <View style={styles.headerInfo}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[styles.profileNameLarge, { color: C.foreground }]}>{user?.name}</Text>
+                <View style={[styles.roleBadgeSmall, { backgroundColor: C.accentLight }]}>
+                  <Text style={[styles.roleTextSmall, { color: C.accent }]}>Citizen</Text>
+                </View>
+              </View>
+              <Text style={[styles.profileEmailSmall, { color: C.textSecondary }]}>{user?.email}</Text>
+              {user?.phone_number && (
+                <Text style={[styles.profilePhoneSmall, { color: C.textSecondary }]}>{user.phone_number}</Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        {/* ── 2. Preferences Card ── */}
+        <View style={[styles.preferencesCard, { backgroundColor: C.card }]}>
+          <View style={styles.prefRowItem}>
+            <View style={styles.prefLeft}>
+              <Ionicons name="moon-outline" size={18} color={C.accent} />
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>Display Mode</Text>
+            </View>
+            <View style={styles.themeToggleCompact}>
+              {['light', 'dark'].map((mode) => (
+                <Pressable
+                  key={mode}
+                  onPress={() => toggleTheme(mode)}
+                  style={[
+                    styles.themeIconPill,
+                    themeMode === mode && { backgroundColor: C.accent }
+                  ]}
+                >
+                  <Ionicons 
+                    name={mode === 'light' ? 'sunny' : 'moon'} 
+                    size={13} 
+                    color={themeMode === mode ? '#fff' : C.mutedForeground} 
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <View style={[styles.dividerFull, { backgroundColor: C.border }]} />
+
+          <View style={styles.prefRowItemVertical}>
+            <View style={styles.prefTopRow}>
+              <View style={styles.prefLeft}>
+                <Ionicons name="language-outline" size={18} color={C.accent} />
+                <Text style={[styles.prefLabel, { color: C.foreground }]}>Language</Text>
+              </View>
+            </View>
+            <View style={styles.langPillContainer}>
+              {sortedLanguages.map((lang) => {
+                const active = language === lang.key;
+                return (
+                  <Pressable
+                    key={lang.key}
+                    style={[
+                      styles.langPillFull,
+                      { backgroundColor: C.muted },
+                      active && { backgroundColor: C.accent }
+                    ]}
+                    onPress={() => changeLanguage(lang.key)}
+                  >
+                    <Text style={[styles.langPillTextFull, { color: C.foreground }, active && { color: '#fff' }]}>
+                      {lang.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* ── 3. Grouped Menu Sections ── */}
+        <View style={styles.menuSection}>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>My Account</Text>
+          <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
+            {accountItems.map((item, i) => (
+              <Pressable
+                key={i}
+                style={[styles.menuRowSimple, i < accountItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                onPress={item.onPress}
+              >
+                <Ionicons name={item.icon} size={20} color={C.accent} style={{ width: 24 }} />
+                <Text style={[styles.menuLabelSimple, { color: C.foreground }]}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={C.mutedForeground} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.menuSection}>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Legal</Text>
+          <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
+            {legalItems.map((item, i) => (
+              <Pressable
+                key={i}
+                style={[styles.menuRowSimple, i < legalItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                onPress={item.onPress}
+              >
+                <Ionicons name={item.icon} size={20} color={C.accent} style={{ width: 24 }} />
+                <Text style={[styles.menuLabelSimple, { color: C.foreground }]}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={C.mutedForeground} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.menuSection}>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Settings</Text>
+          <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
+            {settingItems.map((item, i) => (
+              <Pressable
+                key={i}
+                style={[styles.menuRowSimple, i < settingItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
+                onPress={item.onPress}
+              >
+                <Ionicons name={item.icon} size={20} color={C.accent} style={{ width: 24 }} />
+                <Text style={[styles.menuLabelSimple, { color: C.foreground }]}>{item.label}</Text>
+                <Feather name="chevron-right" size={16} color={C.mutedForeground} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
+          <Pressable 
+            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]} 
+            onPress={handleLogout}
+          >
+            <Text style={[styles.signOutTextRed, { color: C.destructive }]}>{t.signOut}</Text>
           </Pressable>
-          <Text style={[styles.profileName, { color: C.foreground }]}>{user?.name}</Text>
-          <Text style={[styles.profileEmail, { color: C.textSecondary }]}>{user?.email}</Text>
-          {user?.phone_number ? (
-            <Text style={[styles.profilePhone, { color: C.textSecondary }]}>{user.phone_number}</Text>
-          ) : null}
-          <View style={[styles.roleBadge, { backgroundColor: C.accentLight }]}>
-            <Text style={[styles.roleBadgeText, { color: C.accent }]}>{t.userAccount}</Text>
-          </View>
         </View>
-
-        <View style={[styles.settingsCard, { backgroundColor: C.card }]}>
-          <Text style={[styles.sectionTitle, { color: C.textSecondary }]}>{t.theme}</Text>
-          <View style={styles.themeRow}>
-            {[{ key: 'light', icon: 'sunny-outline', label: t.light }, { key: 'dark', icon: 'moon-outline', label: t.dark }].map((mode) => (
-              <Pressable
-                key={mode.key}
-                style={[styles.themeOption, { backgroundColor: C.muted, borderColor: C.border }, themeMode === mode.key && { backgroundColor: C.accentLight, borderColor: C.accent }]}
-                onPress={() => {
-                  toggleTheme(mode.key);
-                  if (Platform.OS !== 'web') Haptics.selectionAsync();
-                }}
-              >
-                <Ionicons name={mode.icon} size={20} color={themeMode === mode.key ? C.accent : C.mutedForeground} />
-                <Text style={[styles.themeLabel, { color: themeMode === mode.key ? C.accent : C.textSecondary }]}>{mode.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={[styles.settingsCard, { backgroundColor: C.card }]}>
-          <Text style={[styles.sectionTitle, { color: C.textSecondary }]}>{t.language}</Text>
-          <View style={styles.languageList}>
-            {availableLanguages.map((lang, i) => (
-              <Pressable
-                key={lang.key}
-                style={[styles.languageRow, i < availableLanguages.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-                onPress={() => {
-                  changeLanguage(lang.key);
-                  if (Platform.OS !== 'web') Haptics.selectionAsync();
-                }}
-              >
-                <Text style={[styles.languageLabel, { color: C.foreground }]}>{lang.label}</Text>
-                {language === lang.key && <Ionicons name="checkmark-circle" size={22} color={C.accent} />}
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={[styles.menuCard, { backgroundColor: C.card }]}>
-          {menuItems.map((item, i) => (
-            <Pressable
-              key={i}
-              style={[styles.menuRow, i < menuItems.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }]}
-              onPress={item.onPress}
-            >
-              <Ionicons name={item.icon} size={22} color={C.textSecondary} />
-              <Text style={[styles.menuLabel, { color: C.foreground }]}>{item.label}</Text>
-              <Feather name="chevron-right" size={18} color={C.mutedForeground} />
-            </Pressable>
-          ))}
-        </View>
-
-        <Pressable style={({ pressed }) => [styles.logoutBtn, { backgroundColor: C.card, borderColor: C.destructive }, pressed && { opacity: 0.85 }]} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={20} color={C.destructive} />
-          <Text style={[styles.logoutText, { color: C.destructive }]}>{t.signOut}</Text>
-        </Pressable>
 
         <Text style={[styles.version, { color: C.mutedForeground }]}>LawyerUp v1.0.0</Text>
       </ScrollView>
 
-      {/* ── Edit Personal Info Modal ── */}
-      <Modal visible={editOpen} animationType="slide" transparent onRequestClose={() => setEditOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setEditOpen(false)} />
-          <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
-            <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.personalInfoModalTitle}</Text>
+      {/* ── Modals ── */}
+      <PersonalInformationModal 
+        visible={editOpen}
+        onClose={() => setEditOpen(false)}
+        C={C}
+        t={t}
+        styles={styles}
+        saving={saving}
+        onSave={onSaveProfile}
+        user={user}
+        isDark={isDark}
+        insets={insets}
+      />
 
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.fullName}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={draftName}
-              onChangeText={setDraftName}
-              placeholder="Your full name"
-              placeholderTextColor={C.mutedForeground}
-              autoCapitalize="words"
-            />
+      <ChangePasswordModal 
+        visible={pwdOpen}
+        onClose={() => setPwdOpen(false)}
+        C={C}
+        t={t}
+        styles={styles}
+        pwdSaving={pwdSaving}
+        onSave={onSavePassword}
+        isDark={isDark}
+        insets={insets}
+      />
 
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.phoneNumber}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={draftPhone}
-              onChangeText={setDraftPhone}
-              placeholder="+216 XX XXX XXX"
-              placeholderTextColor={C.mutedForeground}
-              keyboardType="phone-pad"
-            />
-
-            <View style={styles.sheetActions}>
-              <Pressable style={[styles.btnOutline, { borderColor: C.border }]} onPress={() => setEditOpen(false)}>
-                <Text style={[styles.btnOutlineText, { color: C.foreground }]}>{t.cancel}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.btnPrimary, { backgroundColor: C.accent }, saving && { opacity: 0.7 }]}
-                onPress={saveEdit}
-                disabled={saving}
-              >
-                {saving
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.btnPrimaryText}>{t.saveChanges}</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-      {/* ── Privacy & Security Modal ── */}
       <Modal visible={privacyOpen} animationType="slide" transparent onRequestClose={() => setPrivacyOpen(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setPrivacyOpen(false)} />
@@ -268,26 +312,23 @@ export default function ProfilePage() {
               { icon: 'lock-closed-outline', title: 'Data Encryption', desc: 'All your personal data is encrypted in transit and at rest.' },
               { icon: 'eye-off-outline', title: 'Data Privacy', desc: 'We never sell your personal information to third parties.' },
               { icon: 'shield-checkmark-outline', title: 'Account Security', desc: 'Use a strong password and keep your credentials private.' },
-              { icon: 'trash-outline', title: 'Delete Account', desc: 'Contact support to permanently delete your account and data.' },
             ].map((item, i) => (
-              <View key={i} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
-                <View style={[styles.infoIconBox, { backgroundColor: C.accentLight }]}>
-                  <Ionicons name={item.icon} size={20} color={C.accent} />
-                </View>
+              <View key={i} style={[styles.actionCard, { backgroundColor: isDark ? '#1A1A1A' : C.secondary }]}>
+                <View style={styles.infoIconBoxSimple}><Ionicons name={item.icon} size={18} color={C.accent} /></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
-                  <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
+                  <Text style={[styles.infoTitleSimple, { color: C.foreground }]}>{item.title}</Text>
+                  <Text style={[styles.infoDescSimple, { color: C.textSecondary }]}>{item.desc}</Text>
                 </View>
+                <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable style={[styles.btnPrimary, { backgroundColor: C.accent, marginTop: 20, flex: 0, alignSelf: 'stretch' }]} onPress={() => setPrivacyOpen(false)}>
-              <Text style={styles.btnPrimaryText}>{t.close}</Text>
+            <Pressable style={styles.btnCloseModern} onPress={() => setPrivacyOpen(false)}>
+              <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
 
-      {/* ── Help & Support Modal ── */}
       <Modal visible={helpOpen} animationType="slide" transparent onRequestClose={() => setHelpOpen(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setHelpOpen(false)} />
@@ -300,111 +341,96 @@ export default function ProfilePage() {
               { icon: 'document-text-outline', title: 'Terms of Service', desc: 'Review our terms at lawyerup.tn/terms.' },
               { icon: 'information-circle-outline', title: 'App Version', desc: 'LawyerUp v1.0.0 — Keep the app updated for the best experience.' },
             ].map((item, i) => (
-              <View key={i} style={[styles.infoRow, i > 0 && { borderTopWidth: 1, borderTopColor: C.border }]}>
-                <View style={[styles.infoIconBox, { backgroundColor: C.accentLight }]}>
-                  <Ionicons name={item.icon} size={20} color={C.accent} />
-                </View>
+              <View key={i} style={[styles.actionCard, { backgroundColor: isDark ? '#1A1A1A' : C.secondary }]}>
+                <View style={styles.infoIconBoxSimple}><Ionicons name={item.icon} size={18} color={C.accent} /></View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.infoTitle, { color: C.foreground }]}>{item.title}</Text>
-                  <Text style={[styles.infoDesc, { color: C.textSecondary }]}>{item.desc}</Text>
+                  <Text style={[styles.infoTitleSimple, { color: C.foreground }]}>{item.title}</Text>
+                  <Text style={[styles.infoDescSimple, { color: C.textSecondary }]}>{item.desc}</Text>
                 </View>
+                <Feather name="chevron-right" size={14} color={C.accent} />
               </View>
             ))}
-            <Pressable style={[styles.btnPrimary, { backgroundColor: C.accent, marginTop: 20, flex: 0, alignSelf: 'stretch' }]} onPress={() => setHelpOpen(false)}>
-              <Text style={styles.btnPrimaryText}>{t.close}</Text>
+            <Pressable style={styles.btnCloseModern} onPress={() => setHelpOpen(false)}>
+              <Text style={[styles.btnCloseText, { color: C.foreground }]}>{t.close}</Text>
             </Pressable>
           </View>
         </View>
-      </Modal>
-
-      {/* ── Password Change Modal ── */}
-      <Modal visible={pwdOpen} animationType="slide" transparent onRequestClose={() => setPwdOpen(false)}>
-        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={styles.modalBackdrop} onPress={() => setPwdOpen(false)} />
-          <View style={[styles.sheet, { backgroundColor: C.card, paddingBottom: insets.bottom + 24 }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: C.border }]} />
-            <Text style={[styles.sheetTitle, { color: C.foreground }]}>{t.changePasswordTitle}</Text>
-
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.currentPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={currentPwd} onChangeText={setCurrentPwd}
-              placeholder="Enter current password" placeholderTextColor={C.mutedForeground}
-              secureTextEntry
-            />
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.newPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={newPwd} onChangeText={setNewPwd}
-              placeholder="min. 6 characters" placeholderTextColor={C.mutedForeground}
-              secureTextEntry
-            />
-            <Text style={[styles.fieldLabel, { color: C.textSecondary }]}>{t.confirmNewPasswordLabel}</Text>
-            <TextInput
-              style={[styles.input, { backgroundColor: C.muted, borderColor: C.border, color: C.foreground }]}
-              value={confirmPwd} onChangeText={setConfirmPwd}
-              placeholder="Repeat new password" placeholderTextColor={C.mutedForeground}
-              secureTextEntry
-            />
-            <View style={styles.sheetActions}>
-              <Pressable style={[styles.btnOutline, { borderColor: C.border }]} onPress={() => setPwdOpen(false)}>
-                <Text style={[styles.btnOutlineText, { color: C.foreground }]}>{t.cancel}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.btnPrimary, { backgroundColor: C.accent }, pwdSaving && { opacity: 0.7 }]}
-                onPress={handlePwdChange} disabled={pwdSaving}
-              >
-                {pwdSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnPrimaryText}>{t.updatePasswordBtn}</Text>}
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  profileHeader: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
-  avatarWrapper: { position: 'relative', marginBottom: 14 },
-  avatarLarge: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  avatarLargeText: { fontSize: 28, fontFamily: 'Inter_700Bold' },
-  avatarEdit: { position: 'absolute', bottom: 0, right: 0, width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  profileName: { fontSize: 22, fontFamily: 'Inter_700Bold' },
-  profileEmail: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 4 },
-  profilePhone: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  roleBadge: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginTop: 10 },
-  roleBadgeText: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'capitalize' },
-  settingsCard: { marginHorizontal: 20, borderRadius: 14, padding: 16, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, marginBottom: 16 },
-  sectionTitle: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 },
-  themeRow: { flexDirection: 'row', gap: 10 },
-  themeOption: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, gap: 6 },
-  themeLabel: { fontSize: 12, fontFamily: 'Inter_500Medium' },
-  languageList: { gap: 0 },
-  languageRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14 },
-  languageLabel: { fontSize: 15, fontFamily: 'Inter_500Medium' },
-  menuCard: { marginHorizontal: 20, borderRadius: 14, overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6, marginBottom: 20 },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16 },
-  menuLabel: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium' },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 20, paddingVertical: 14, borderRadius: 14, borderWidth: 1.5 },
-  logoutText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  version: { textAlign: 'center', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 20 },
-  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingVertical: 14 },
-  infoIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 2 },
-  infoTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', marginBottom: 3 },
-  infoDesc: { fontSize: 13, fontFamily: 'Inter_400Regular', lineHeight: 18 },
+  headerCard: { paddingHorizontal: 20, paddingTop: 10, marginBottom: 20 },
+  headerTop: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  headerInfo: { flex: 1 },
+  profileNameLarge: { fontSize: 24, fontFamily: 'Inter_700Bold' },
+  profileEmailSmall: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  profilePhoneSmall: { fontSize: 13, fontFamily: 'Inter_400Regular', marginTop: 2 },
+  roleBadgeSmall: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  roleTextSmall: { fontSize: 10, fontFamily: 'Inter_700Bold', textTransform: 'uppercase' },
+
+  // Preferences Card
+  preferencesCard: { marginHorizontal: 20, borderRadius: 24, padding: 4, marginBottom: 20, elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 6 },
+  prefRowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
+  prefRowItemVertical: { paddingHorizontal: 20, paddingVertical: 14 },
+  prefTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  prefLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  prefLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+  dividerFull: { height: 1, marginHorizontal: 20, opacity: 0.6 },
+  themeToggleCompact: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 20, padding: 2 },
+  themeIconPill: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  langPillContainer: { flexDirection: 'row', gap: 8 },
+  langPillFull: { flex: 1, paddingVertical: 12, borderRadius: 14, alignItems: 'center' },
+  langPillTextFull: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
+
+  // Grouped Menu
+  menuSection: { marginBottom: 20 },
+  menuSectionTitle: { marginHorizontal: 24, fontSize: 12, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', marginBottom: 8 },
+  menuGroupCard: { marginHorizontal: 20, borderRadius: 20, overflow: 'hidden' },
+  menuRowSimple: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
+  menuLabelSimple: { flex: 1, fontSize: 15, fontFamily: 'Inter_500Medium' },
+
+  signOutBtnRed: { borderRadius: 16, paddingVertical: 14, alignItems: 'center', borderWidth: 1.5, marginHorizontal: 20 },
+  signOutTextRed: { fontSize: 15, fontFamily: 'Inter_700Bold' },
+
+  version: { textAlign: 'center', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 24, marginBottom: 40 },
+
+  // Glassmorphism Inputs
+  glassInputWrapper: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1.5, borderColor: 'rgba(212, 175, 55, 0.1)', marginBottom: 20, paddingHorizontal: 16, backgroundColor: 'rgba(0,0,0,0.03)' },
+  glassInputFocused: { borderColor: '#D4AF37', backgroundColor: 'transparent' },
+  inputIcon: { marginRight: 12 },
+  glassInput: { flex: 1, paddingVertical: 14, fontSize: 15, fontFamily: 'Inter_400Regular' },
+  glassTextAreaWrapper: { alignItems: 'flex-start', paddingVertical: 4 },
+  glassTextArea: { height: 100, textAlignVertical: 'top' },
+
+  // Pwd Security
+  pwdStrengthContainer: { marginBottom: 20, gap: 6 },
+  pwdBar: { height: 4, borderRadius: 2, overflow: 'hidden' },
+  pwdBarFill: { height: '100%', borderRadius: 2 },
+  pwdText: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase' },
+
+  sheetActionsFull: { flexDirection: 'row', gap: 12, marginTop: 12, paddingHorizontal: 4 },
+  btnGhostGold: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(212, 175, 55, 0.4)', alignItems: 'center', justifyContent: 'center' },
+  btnGhostText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+  btnPrimaryWrapper: { flex: 1.5, borderRadius: 12, overflow: 'hidden', elevation: 4, shadowColor: '#D4AF37', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
+  btnPrimaryGradient: { paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
+  btnPrimaryText: { fontSize: 15, fontFamily: 'Inter_700Bold', color: '#fff' },
+
+  // Action Card Info
+  actionCard: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 16, marginBottom: 10, marginHorizontal: 0 },
+  infoIconBoxSimple: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
+  infoTitleSimple: { fontSize: 15, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
+  infoDescSimple: { fontSize: 13, fontFamily: 'Inter_400Regular', opacity: 0.6 },
+
+  btnCloseModern: { marginTop: 20, paddingVertical: 14, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  btnCloseText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
+
   // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 12 },
-  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  sheetTitle: { fontSize: 18, fontFamily: 'Inter_700Bold', marginBottom: 20 },
-  fieldLabel: { fontSize: 12, fontFamily: 'Inter_600SemiBold', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 },
-  input: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, fontFamily: 'Inter_400Regular', marginBottom: 16 },
-  sheetActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
-  btnOutline: { flex: 1, alignItems: 'center', paddingVertical: 14, borderRadius: 12, borderWidth: 1.5 },
-  btnOutlineText: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
-  btnPrimary: { flex: 2, alignItems: 'center', paddingVertical: 14, borderRadius: 12 },
-  btnPrimaryText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: '#fff' },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 16 },
+  sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  sheetTitle: { fontSize: 20, fontFamily: 'Inter_700Bold', marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
+  fieldLabel: { fontSize: 11, fontFamily: 'Inter_700Bold', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, opacity: 0.6 },
 });
