@@ -115,9 +115,9 @@ export default function LawyerProfilePage() {
   async function onSavePassword(data) {
     try {
       setPwdSaving(true);
-      await userApi.changePassword({ 
-        currentPassword: data.currentPassword, 
-        newPassword: data.newPassword 
+      await userApi.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword
       });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Password changed successfully.');
@@ -148,22 +148,22 @@ export default function LawyerProfilePage() {
 
   const sortedLanguages = [...availableLanguages].sort((a, b) => {
     if (a.key === 'ar') return -1;
-    if (a.key === 'ar') return 1;
+    if (b.key === 'ar') return 1;
     return 0;
   });
 
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 60 }}
       >
         <View style={styles.headerSimple}>
           <View style={styles.headerSimpleTop}>
-            <StatusAvatar 
-              url={user?.profile_photo_url} 
-              size={76} 
-              isAvailable={isAvailable} 
+            <StatusAvatar
+              url={user?.profile_photo_url}
+              size={76}
+              isAvailable={isAvailable}
               onPhotoPress={handlePhotoUpload}
               showEditIcon={true}
             />
@@ -206,10 +206,10 @@ export default function LawyerProfilePage() {
                     themeMode === mode && { backgroundColor: C.accent }
                   ]}
                 >
-                  <Ionicons 
-                    name={mode === 'light' ? 'sunny' : 'moon'} 
-                    size={13} 
-                    color={themeMode === mode ? '#fff' : C.mutedForeground} 
+                  <Ionicons
+                    name={mode === 'light' ? 'sunny' : 'moon'}
+                    size={13}
+                    color={themeMode === mode ? '#fff' : C.mutedForeground}
                   />
                 </Pressable>
               ))}
@@ -275,8 +275,8 @@ export default function LawyerProfilePage() {
         </View>
 
         <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
-          <Pressable 
-            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]} 
+          <Pressable
+            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]}
             onPress={handleLogout}
           >
             <Text style={[styles.signOutTextRed, { color: C.destructive }]}>{t.signOut}</Text>
@@ -286,7 +286,7 @@ export default function LawyerProfilePage() {
       </ScrollView>
 
       {/* ── Modals ── */}
-      <LawyerEditProfileModal 
+      <LawyerEditProfileModal
         visible={editOpen}
         onClose={() => setEditOpen(false)}
         C={C}
@@ -299,7 +299,7 @@ export default function LawyerProfilePage() {
         insets={insets}
       />
 
-      <ChangePasswordModal 
+      <ChangePasswordModal
         visible={pwdOpen}
         onClose={() => setPwdOpen(false)}
         C={C}
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   signOutTextRed: { fontSize: 15, fontFamily: 'Inter_700Bold' },
 
   version: { textAlign: 'center', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 24, marginBottom: 40 },
-  
+
   // Modal Aesthetics
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },

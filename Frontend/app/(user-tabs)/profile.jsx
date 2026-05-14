@@ -68,9 +68,9 @@ export default function ProfilePage() {
   async function onSaveProfile(data) {
     try {
       setSaving(true);
-      await updateUser({ 
-        full_name: data.full_name.trim(), 
-        phone_number: data.phone_number.trim() || null 
+      await updateUser({
+        full_name: data.full_name.trim(),
+        phone_number: data.phone_number.trim() || null
       });
       setEditOpen(false);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -84,9 +84,9 @@ export default function ProfilePage() {
   async function onSavePassword(data) {
     try {
       setPwdSaving(true);
-      await userApi.changePassword({ 
-        currentPassword: data.currentPassword, 
-        newPassword: data.newPassword 
+      await userApi.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword
       });
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Password changed successfully.');
@@ -131,9 +131,9 @@ export default function ProfilePage() {
         {/* ── 1. Header with StatusAvatar ── */}
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
-            <StatusAvatar 
-              url={user?.profile_photo_url} 
-              size={76} 
+            <StatusAvatar
+              url={user?.profile_photo_url}
+              size={76}
               isAvailable={true} // Citizen always green for now
               onPhotoPress={handlePhotoUpload}
               showEditIcon={true}
@@ -170,10 +170,10 @@ export default function ProfilePage() {
                     themeMode === mode && { backgroundColor: C.accent }
                   ]}
                 >
-                  <Ionicons 
-                    name={mode === 'light' ? 'sunny' : 'moon'} 
-                    size={13} 
-                    color={themeMode === mode ? '#fff' : C.mutedForeground} 
+                  <Ionicons
+                    name={mode === 'light' ? 'sunny' : 'moon'}
+                    size={13}
+                    color={themeMode === mode ? '#fff' : C.mutedForeground}
                   />
                 </Pressable>
               ))}
@@ -265,8 +265,8 @@ export default function ProfilePage() {
         </View>
 
         <View style={{ marginTop: 24, paddingHorizontal: 20 }}>
-          <Pressable 
-            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]} 
+          <Pressable
+            style={({ pressed }) => [styles.signOutBtnRed, { borderColor: C.destructive }, pressed && { opacity: 0.7 }]}
             onPress={handleLogout}
           >
             <Text style={[styles.signOutTextRed, { color: C.destructive }]}>{t.signOut}</Text>
@@ -277,7 +277,7 @@ export default function ProfilePage() {
       </ScrollView>
 
       {/* ── Modals ── */}
-      <PersonalInformationModal 
+      <PersonalInformationModal
         visible={editOpen}
         onClose={() => setEditOpen(false)}
         C={C}
@@ -290,7 +290,7 @@ export default function ProfilePage() {
         insets={insets}
       />
 
-      <ChangePasswordModal 
+      <ChangePasswordModal
         visible={pwdOpen}
         onClose={() => setPwdOpen(false)}
         C={C}

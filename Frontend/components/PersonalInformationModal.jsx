@@ -14,10 +14,10 @@ const MemoizedGlassInput = memo(({
   onFocus, 
   onBlur, 
   isFocused, 
-  styles,
   C,
   inputKey,
-  isDark
+  isDark,
+  styles,
 }) => (
   <View style={[styles.glassInputWrapper, isFocused && styles.glassInputFocused]}>
     {icon && <Feather name={icon} size={18} color={isFocused ? C.accent : 'rgba(212,175,55,0.4)'} style={styles.inputIcon} />}

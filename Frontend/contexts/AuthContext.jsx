@@ -14,9 +14,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function hasSupabaseSession() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) return false;
-    return Boolean(data?.session?.access_token);
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        // Stale/invalid refresh token in AsyncStorage — wipe it so the SDK
+        // doesn't keep retrying and throwing on every app launch.
+        try { await supabase.auth.signOut(); } catch { /* best effort */ }
+        return false;
+      }
+      return Boolean(data?.session?.access_token);
+    } catch {
+      // AuthApiError or network error — treat as no session
+      try { await supabase.auth.signOut(); } catch { /* best effort */ }
+      return false;
+    }
   }
 
   async function restoreSession() {

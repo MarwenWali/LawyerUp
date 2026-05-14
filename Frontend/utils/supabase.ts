@@ -62,7 +62,11 @@ export const supabase = hasSupabaseEnv
   ? createClient(supabaseUrl as string, supabaseKey as string, {
       auth: {
         storage: AsyncStorage,
-        autoRefreshToken: true,
+        // autoRefreshToken disabled: JWT is our primary auth; Supabase is only
+        // used for realtime channels. Auto-refreshing causes "Invalid Refresh
+        // Token" crashes on startup when a stale Supabase session sits in
+        // AsyncStorage. The session is refreshed explicitly after login.
+        autoRefreshToken: false,
         persistSession: true,
         detectSessionInUrl: false,
       },
