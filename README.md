@@ -1,146 +1,96 @@
 # LawyerUp
 
-LawyerUp is a legal platform that connects users with lawyers in Tunisia.
+## Description
+LawyerUp is a comprehensive legal platform designed to connect users with qualified lawyers in Tunisia. It features a mobile application for end-users, an admin dashboard for management, and an AI-powered engine (`ai_iss`) to assist with legal processes.
 
-## Project Structure
+## Badges
+![Pipeline Status](https://gitlab.com/mediterranean-institute-of-technology/iss-projects/2026/lawyerup/badges/main/pipeline.svg)
 
-```text
-LawyerUp/
-|-- backend/          # Node.js + Express REST API (port 3000)
-|-- Frontend/         # React Native / Expo mobile app
-|-- admin-dashboard/  # Vite + React web admin panel (port 8080 or 5173)
-|-- ai_iss/           # Python AI assistant runtime (port 8000)
-```
+## Visuals
+*(Screenshots or GIFs of the mobile app and admin dashboard can be added here in the future)*
 
-## Prerequisites
-
+### Prerequisites
 - Node.js v18+
 - Python 3.10+ (for `ai_iss`)
 - Supabase project (for managed Postgres)
 - Expo CLI (`npm install -g expo-cli`) for mobile app
 
-## Quick Start (Recommended)
-
-### Run Order
-Start services in this order:
-1. Backend (`backend`)
-2. AI runtime (`ai_iss`)
-3. Frontend (`Frontend`)
-4. Admin dashboard (`admin-dashboard`, optional)
-
-### 1) Backend
-
+### 1 Backend Setup
 ```bash
 cd backend
 npm install
 ```
+Create a `backend/.env` file from `backend/.env.example` and ensure it is configured with your Supabase credentials, JWT secret, and `AI_ENGINE_URL=http://localhost:8000`.
 
-Create `backend/.env` from `backend/.env.example` and configure:
-```env
-# Server
-PORT=3000
-NODE_ENV=development
-
-# Supabase Postgres (recommended)
-SUPABASE_DB_URL=postgresql://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:6543/postgres
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-# JWT
-JWT_SECRET=your_super_secret_jwt_key
-AI_ENGINE_URL=http://localhost:8000
-```
-
-Apply database setup:
+Apply migrations and seed data:
 ```bash
 npm run db:migrate
 npm run supabase:migrate
 npm run db:seed
 ```
 
-Start backend:
-```bash
-npm run dev
-```
-API: `http://localhost:3000`
-
-### 2) AI Engine (`ai_iss`)
-
-The issuing engine is located in `ai_iss/`.
-
+### 2 AI Engine (`ai_iss`) Setup
 ```bash
 cd ai_iss
 python -m venv venv
-# Windows
-.\venv\Scripts\activate
-# Unix/macOS
-source venv/bin/activate
+# Windows: .\venv\Scripts\activate
+# Unix/macOS: source venv/bin/activate
 pip install -r requirements.txt
-python main.py
 ```
-Default URL: `http://localhost:8000`
 
-### 3) Mobile App (Frontend)
-
+### 3 Mobile App (Frontend) Setup
 ```bash
 cd Frontend
 npm install
-npm start
 ```
-Optional for tunnel/dev network:
-- Set `EXPO_PUBLIC_API_URL` if backend is not reachable at local host IP.
-- Keep `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_KEY` configured.
 
-### 4) Admin Dashboard
-
+### 4 Admin Dashboard Setup
 ```bash
 cd admin-dashboard
 npm install
-npm run dev
-```
-Open: `http://localhost:5173` or `http://localhost:8080`.
-
-## Useful Backend Scripts
-
-- `npm run dev` - start backend with nodemon
-- `npm start` - start backend in normal mode
-- `npm run db:migrate` - apply backend schema SQL
-- `npm run supabase:migrate` - apply Supabase messaging migrations
-- `npm run db:seed` - insert demo data
-- `npm run db:reset` - destructive reset
-
-## Troubleshooting
-
-### Port 3000 already in use (Windows)
-```bash
-netstat -ano | findstr :3000
-taskkill /PID <pid> /F
 ```
 
-### Backend cannot connect to DB
-- Verify `SUPABASE_DB_URL` in `backend/.env`.
-- Keep `DB_SSL=true` for Supabase (default in `.env.example`).
+## Usage
 
-### Failed to create/send chat messages
-Run:
-```bash
-cd backend
-npm run db:migrate
-npm run supabase:migrate
-```
+Start the services in this recommended order:
 
-### AI assistant unavailable
-Make sure both are running:
-1. `backend` API on port `3000`
-2. `ai_iss` FastAPI on port `8000`
-And verify `AI_ENGINE_URL=http://localhost:8000` in `backend/.env`.
+1. **Backend**: `cd backend && npm run dev` (Runs on API: `http://localhost:3000`)
+2. **AI Engine**: `cd ai_iss && python main.py` (Runs on Default URL: `http://localhost:8000`)
+3. **Mobile App**: `cd Frontend && npm start` (Use Expo Go or a physical device)
+4. **Admin Dashboard**: `cd admin-dashboard && npm run dev` (Runs on `http://localhost:5173` or `http://localhost:8080`)
 
-## CI/CD and Deployment
+**Troubleshooting:**
+- **Port 3000 already in use (Windows):** `netstat -ano | findstr :3000` followed by `taskkill /PID <pid> /F`.
+- **Backend cannot connect to DB:** Verify `SUPABASE_DB_URL` in `backend/.env` and keep `DB_SSL=true`.
+- **AI assistant unavailable:** Ensure both backend and `ai_iss` are running, and verify `AI_ENGINE_URL` is correct.
+- **Failed to create/send chat messages:** Re-run `npm run db:migrate` and `npm run supabase:migrate` in the backend folder.
 
-This project uses GitLab CI/CD for testing and deployment.
-- Tests are configured in `.gitlab-ci.yml` for all components.
-- Deployment jobs are available as templates and will need environment-specific credentials to be configured in your GitLab repository settings.
+## Support
+For help with this project, please open an issue in the GitLab repository or contact the development team.
+
+## Roadmap
+- [ ] Complete mobile application UI stabilization
+- [ ] Enhance AI model for more accurate legal advice
+- [ ] Implement robust multi-language localization
+- [ ] Deploy backend and AI services to production environments
+
+## Contributing
+Contributions are welcome! Please follow these steps:
+1. Ensure your code passes all linting and tests (configured in `.gitlab-ci.yml`).
+2. Follow the directory structure (`Frontend`, `backend`, `admin-dashboard`, `ai_iss`).
+3. Open a Merge Request against the `main` branch.
+
+**Useful Backend Scripts for Contributors:**
+- `npm run db:migrate` - Apply backend schema SQL
+- `npm run supabase:migrate` - Apply Supabase messaging migrations
+- `npm run db:seed` - Insert demo data
+- `npm run db:reset` - Destructive reset of database
+
+## Authors and acknowledgment
+Developed by the Mediterranean Institute of Technology (South Mediterranean University) ISS Projects Team 2026. Special thanks to all contributors who worked on the backend, mobile application, admin dashboard, and AI engine.
 
 ## License
 MIT
+
+## Project status
+Active development.
