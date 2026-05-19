@@ -12,7 +12,7 @@ frontend-test:
   stage: test
   image: node:18-alpine
   script:
-    - cd frontend
+    - cd Frontend
     - npm install --legacy-peer-deps
     - echo "Frontend linting and tests completed successfully."
   allow_failure: true

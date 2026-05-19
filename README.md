@@ -7,7 +7,7 @@ LawyerUp is a legal platform that connects users with lawyers in Tunisia.
 ```text
 LawyerUp/
 |-- backend/          # Node.js + Express REST API (port 3000)
-|-- frontend/         # React Native / Expo mobile app
+|-- Frontend/         # React Native / Expo mobile app
 |-- admin-dashboard/  # Vite + React web admin panel (port 8080 or 5173)
 |-- ai_iss/           # Python AI assistant runtime (port 8000)
 ```
@@ -25,7 +25,7 @@ LawyerUp/
 Start services in this order:
 1. Backend (`backend`)
 2. AI runtime (`ai_iss`)
-3. Frontend (`frontend`)
+3. Frontend (`Frontend`)
 4. Admin dashboard (`admin-dashboard`, optional)
 
 ### 1) Backend
@@ -84,7 +84,7 @@ Default URL: `http://localhost:8000`
 ### 3) Mobile App (Frontend)
 
 ```bash
-cd frontend
+cd Frontend
 npm install
 npm start
 ```
