@@ -131,10 +131,10 @@ export default function LawyerDashboard() {
   );
 
   const stats = [
-    { label: 'Incoming', value: String(pendingRequests), icon: 'mail-outline', color: C.warning, bg: 'rgba(245,158,11,0.1)', route: '/(lawyer-tabs)/cases?filter=Incoming' },
-    { label: 'Active', value: String(activeCases), icon: 'briefcase', color: C.success, bg: 'rgba(22,163,74,0.1)', route: '/(lawyer-tabs)/cases?filter=Active' },
-    { label: 'Completed', value: String(completedCases), icon: 'checkmark-circle', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: '/(lawyer-tabs)/cases?filter=Completed' },
-    { label: 'This Month', value: `+${thisMonthCases}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)', route: '/(lawyer-tabs)/cases?filter=All' },
+    { label: t.statIncoming, value: String(pendingRequests), icon: 'mail-outline', color: C.warning, bg: 'rgba(245,158,11,0.1)', route: '/(lawyer-tabs)/cases?filter=Incoming' },
+    { label: t.statActive, value: String(activeCases), icon: 'briefcase', color: C.success, bg: 'rgba(22,163,74,0.1)', route: '/(lawyer-tabs)/cases?filter=Active' },
+    { label: t.statCompleted, value: String(completedCases), icon: 'checkmark-circle', color: C.tint, bg: isDark ? 'rgba(212,160,60,0.12)' : 'rgba(20,33,61,0.08)', route: '/(lawyer-tabs)/cases?filter=Completed' },
+    { label: t.statThisMonth, value: `+${thisMonthCases}`, icon: 'trending-up', color: C.accent, bg: 'rgba(212,160,60,0.12)', route: '/(lawyer-tabs)/cases?filter=All' },
   ];
 
   return (
@@ -202,19 +202,19 @@ export default function LawyerDashboard() {
         <View style={{ marginBottom: 28 }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Appointments</Text>
+            <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>{t.myAppointments}</Text>
               <Pressable onPress={() => router.push('/(lawyer-tabs)/create-appointment')} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
                 <Ionicons name="add" size={20} color={C.accent} />
               </Pressable>
             </View>
             <Pressable onPress={() => router.push('/(lawyer-tabs)/all-appointments')}>
-              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll}</Text>
             </Pressable>
           </View>
           {loadingAppointments ? (
             <ActivityIndicator color={C.accent} style={{ paddingVertical: 32 }} />
           ) : appointments.length === 0 ? (
-            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No upcoming appointments</Text>
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>{t.noUpcomingAppointments}</Text>
           ) : (
             <FlatList
               horizontal
@@ -239,7 +239,7 @@ export default function LawyerDashboard() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontFamily: 'Inter_600SemiBold', color: C.foreground }} numberOfLines={1}>{item.title}</Text>
-                        <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.mutedForeground }}>{isCitizen ? 'Citizen Appointment' : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}</Text>
+                        <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: C.mutedForeground }}>{isCitizen ? t.citizenAppointment : isCourt && item.location ? item.location : item.type.charAt(0).toUpperCase() + item.type.slice(1)}</Text>
                       </View>
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', padding: 8, borderRadius: 8 }}>

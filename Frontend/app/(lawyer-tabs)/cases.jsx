@@ -15,13 +15,24 @@ export default function CasesPage() {
   const params = useLocalSearchParams();
   const [search, setSearch] = useState('');
   
-  const STATUS_FILTERS = ['Incoming', 'Active', 'Completed', 'Rejected'];
+  const STATUS_FILTERS = [
+    { key: 'Incoming',  label: t.caseIncoming  || 'Incoming'  },
+    { key: 'Active',    label: t.caseActive    || 'Active'    },
+    { key: 'Completed', label: t.caseCompleted || 'Completed' },
+    { key: 'Rejected',  label: t.caseRejected  || 'Rejected'  },
+  ];
+
+  const translatedStatusFilters = useMemo(
+    () => STATUS_FILTERS.map(f => ({ ...f, label: f.label })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t]
+  );
   
   // Resolve initial filter from params if it matches one of our filters
   const getInitialFilter = () => {
     if (!params.filter) return 'Incoming';
-    const match = STATUS_FILTERS.find(f => f.toLowerCase() === params.filter.toLowerCase());
-    return match || 'Incoming';
+    const match = STATUS_FILTERS.find(f => f.key.toLowerCase() === params.filter.toLowerCase());
+    return match ? match.key : 'Incoming';
   };
   
   const [filter, setFilter] = useState(getInitialFilter());
@@ -29,10 +40,10 @@ export default function CasesPage() {
   // Also update filter if params change
   useEffect(() => {
     if (params.filter) {
-      const match = STATUS_FILTERS.find(f => f.toLowerCase() === params.filter.toLowerCase());
-      if (match) setFilter(match);
+      const match = STATUS_FILTERS.find(f => f.key.toLowerCase() === params.filter.toLowerCase());
+      if (match) setFilter(match.key);
     }
-  }, [params.filter, STATUS_FILTERS]);
+  }, [params.filter]);
 
   const [selectedCase, setSelectedCase] = useState(null);
   const [cases, setCases] = useState([]);
@@ -197,9 +208,9 @@ function CaseCard({ c, onPress, onAccept, onReject, C, t }) {
             <TextInput style={[styles.searchInput, { color: C.foreground }]} placeholder={t.searchCases} placeholderTextColor={C.mutedForeground} value={search} onChangeText={setSearch} />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
-            {STATUS_FILTERS.map(s => (
-              <Pressable key={s} style={[styles.filterPill, { backgroundColor: C.background, borderColor: C.border }, filter === s && { backgroundColor: C.tint, borderColor: C.tint }]} onPress={() => setFilter(s)}>
-                <Text style={[styles.filterText, { color: C.textSecondary }, filter === s && { color: C.primaryForeground }]}>{s}</Text>
+            {translatedStatusFilters.map(({ key, label }) => (
+              <Pressable key={key} style={[styles.filterPill, { backgroundColor: C.background, borderColor: C.border }, filter === key && { backgroundColor: C.tint, borderColor: C.tint }]} onPress={() => setFilter(key)}>
+                <Text style={[styles.filterText, { color: C.textSecondary }, filter === key && { color: C.primaryForeground }]}>{label}</Text>
               </Pressable>
             ))}
           </ScrollView>

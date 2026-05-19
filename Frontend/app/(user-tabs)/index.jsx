@@ -172,7 +172,7 @@ export default function UserDashboard() {
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, justifyContent: 'center', alignItems: 'center' }]}>
           <View style={{ backgroundColor: C.card, padding: 24, borderRadius: 16, alignItems: 'center' }}>
             <ActivityIndicator size="large" color={C.tint} style={{ marginBottom: 16 }} />
-            <Text style={{ color: C.foreground, fontFamily: 'Inter_600SemiBold', fontSize: 16 }}>Uploading...</Text>
+            <Text style={{ color: C.foreground, fontFamily: 'Inter_600SemiBold', fontSize: 16 }}>{t.uploading}</Text>
           </View>
         </View>
       )}
@@ -233,19 +233,19 @@ export default function UserDashboard() {
         <View style={{ marginBottom: 28 }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Appointments</Text>
+              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>{t.myAppointments}</Text>
               <Pressable onPress={() => router.push('/(user-tabs)/create-appointment')} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
                 <Ionicons name="add" size={20} color={C.accent} />
               </Pressable>
             </View>
             <Pressable onPress={() => router.push('/(user-tabs)/all-appointments')}>
-              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll}</Text>
             </Pressable>
           </View>
           {loadingAppointments ? (
             <ActivityIndicator color={C.accent} style={{ paddingVertical: 32 }} />
           ) : appointments.length === 0 ? (
-            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No upcoming appointments</Text>
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>{t.noUpcomingAppointments}</Text>
           ) : (
             <FlatList
               horizontal
@@ -288,19 +288,19 @@ export default function UserDashboard() {
         <View style={{ marginBottom: 24 }}>
           <View style={[styles.sectionHeaderRow, { paddingHorizontal: 20, marginBottom: 14 }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>My Legal Vault</Text>
+              <Text style={[styles.sectionTitle, { color: C.foreground, marginBottom: 0, marginRight: 8 }]}>{t.myLegalVault}</Text>
               <Pressable onPress={handleUploadClick} style={{ backgroundColor: 'rgba(184, 135, 47, 0.1)', borderRadius: 12, padding: 4 }}>
                 <Ionicons name="add" size={20} color={C.accent} />
               </Pressable>
             </View>
             <Pressable onPress={() => router.push('/(user-tabs)/vault')}>
-              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>See All</Text>
+              <Text style={{ color: C.accent, fontSize: 13, fontFamily: 'Inter_600SemiBold' }}>{t.seeAll}</Text>
             </Pressable>
           </View>
           {loadingVault ? (
             <ActivityIndicator color={C.accent} style={{ paddingVertical: 20 }} />
           ) : vaultFiles.length === 0 ? (
-            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>No files uploaded yet</Text>
+            <Text style={[styles.emptyText, { color: C.mutedForeground, paddingHorizontal: 20 }]}>{t.noFilesYet}</Text>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
               {vaultFiles.map(file => {

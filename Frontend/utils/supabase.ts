@@ -58,6 +58,24 @@ const missingSupabaseClient = {
   },
 };
 
+// Clear any stale Supabase auth session from AsyncStorage on startup.
+// Our app uses JWT as its primary auth; Supabase is only used for realtime
+// channels. A leftover Supabase session with an expired refresh token causes
+// "Invalid Refresh Token: Refresh Token Not Found" crashes every cold boot.
+// We wipe the Supabase-owned storage keys here to prevent that error.
+const SUPABASE_AUTH_KEYS = [
+  `sb-${supabaseUrl?.split('//')[1]?.split('.')[0]}-auth-token`,
+  `sb-${supabaseUrl?.split('//')[1]?.split('.')[0]}-auth-token-code-verifier`,
+];
+
+(async () => {
+  try {
+    await AsyncStorage.multiRemove(SUPABASE_AUTH_KEYS);
+  } catch {
+    // Best-effort — never block app startup
+  }
+})();
+
 export const supabase = hasSupabaseEnv
   ? createClient(supabaseUrl as string, supabaseKey as string, {
       auth: {
@@ -67,7 +85,7 @@ export const supabase = hasSupabaseEnv
         // Token" crashes on startup when a stale Supabase session sits in
         // AsyncStorage. The session is refreshed explicitly after login.
         autoRefreshToken: false,
-        persistSession: true,
+        persistSession: false,
         detectSessionInUrl: false,
       },
     })

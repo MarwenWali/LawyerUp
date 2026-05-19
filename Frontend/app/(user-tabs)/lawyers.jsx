@@ -574,6 +574,25 @@ export default function LawyersPage() {
   const [loading, setLoading] = useState(true);
   const [selectedLawyer, setSelectedLawyer] = useState(null);
 
+  // ── Translated filter pills — re-derived whenever language toggles ──────
+  const FILTER_LABEL_MAP = {
+    All:            t.filterAll,
+    Family:         t.filterFamily,
+    Commercial:     t.filterCommercial,
+    Criminal:       t.filterCriminal,
+    Labor:          t.filterLabor,
+    Property:       t.filterProperty,
+    Administrative: t.filterAdministrative,
+    Tax:            t.filterTax,
+    Immigration:    t.filterImmigration,
+  };
+
+  const translatedFilters = useMemo(
+    () => SPECIALIZATIONS.map(key => ({ key, label: FILTER_LABEL_MAP[key] || key })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t]  // re-run whenever the active locale object changes
+  );
+
   const fetchLawyers = useCallback(async () => {
     try {
       setLoading(true);
@@ -614,13 +633,13 @@ export default function LawyersPage() {
             />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
-            {SPECIALIZATIONS.map(s => (
+            {translatedFilters.map(({ key, label }) => (
               <Pressable
-                key={s}
-                style={[styles.filterPill, { backgroundColor: C.background, borderColor: C.border }, filter === s && { backgroundColor: C.tint, borderColor: C.tint }]}
-                onPress={() => setFilter(s)}
+                key={key}
+                style={[styles.filterPill, { backgroundColor: C.background, borderColor: C.border }, filter === key && { backgroundColor: C.tint, borderColor: C.tint }]}
+                onPress={() => setFilter(key)}
               >
-                <Text style={[styles.filterText, { color: C.textSecondary }, filter === s && { color: C.primaryForeground }]}>{s}</Text>
+                <Text style={[styles.filterText, { color: C.textSecondary }, filter === key && { color: C.primaryForeground }]}>{label}</Text>
               </Pressable>
             ))}
           </ScrollView>

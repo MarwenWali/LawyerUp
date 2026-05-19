@@ -9,11 +9,20 @@ const ai = new GoogleGenAI({
   httpOptions: { timeout: 30000 }
 });
 
-// ── Model fallback chain (confirmed available on this API key) ──────────────
-// gemini-2.5-flash: powerful default
-// gemini-2.0-flash: fallback
-// gemini-2.5-flash-lite: high-quota last resort
+// ── Model fallback chain ────────────────────────────────────────────────────
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash-lite-001'];
+
+/** Parse the retryDelay (seconds) the API asked us to wait. */
+function parseRetryDelay(errMsg) {
+  // Error body contains "retryDelay":"34s" or "Please retry in 34.8s"
+  const secondsMatch = errMsg.match(/retryDelay[":\s]+([0-9.]+)s/);
+  if (secondsMatch) return Math.min(parseFloat(secondsMatch[1]), 30); // cap at 30 s
+  const inlineMatch = errMsg.match(/retry in ([0-9.]+)s/);
+  if (inlineMatch) return Math.min(parseFloat(inlineMatch[1]), 30);
+  return 5; // default 5 s if unparseable
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function geminiGenerate(params) {
   let lastError;
@@ -28,12 +37,21 @@ async function geminiGenerate(params) {
       const errStatus = err?.status || err?.httpStatusCode || err?.code;
       console.warn(`[AI Agent] Model ${model} failed (status=${errStatus}): ${errMsg.slice(0, 200)}`);
       lastError = err;
-      // Retry on quota exhaustion, rate limits, overload, or model not found
+
       const isRetryable =
         errStatus === 429 || errStatus === 503 || errStatus === 404 ||
         /429|quota|rate.?limit|resource.?exhausted|overload|not.?found|unavailable/i.test(errMsg);
       if (!isRetryable) throw err;
-      console.log(`[AI Agent] Retryable error — trying next model in fallback list...`);
+
+      // Respect the API-requested retry delay before trying the next model
+      const isPerDayQuota = /PerDay/i.test(errMsg);
+      if (!isPerDayQuota) {
+        const delaySec = parseRetryDelay(errMsg);
+        console.log(`[AI Agent] Waiting ${delaySec}s before next model (API requested)...`);
+        await sleep(delaySec * 1000);
+      } else {
+        console.log(`[AI Agent] Per-day quota exhausted for ${model} — skipping without wait.`);
+      }
     }
   }
   throw lastError;
@@ -250,25 +268,28 @@ export async function generateReply(req, res) {
       }
 
       // ── STEP 2: Build system instruction + conversation history ──
-      const systemInstruction = `You are the LawyerUp Assistant. You have access to the app's database and can perform actions on behalf of the user.
+      const systemInstruction = `You are LawyerUp AI, a warm and knowledgeable legal assistant specialized in Tunisian law. You work inside the LawyerUp app and can take real actions in the database.
 
-Lawyer Recommendations: If the user asks about lawyers, finding a lawyer, or who is the best lawyer, ALWAYS call the getLawyers tool to fetch real data. Never make up lawyer names or IDs. Only recommend lawyers found in the database.
+PERSONALITY: Be warm, empathetic, and thorough — never terse or robotic. Give detailed, well-structured answers with bullet points and examples. Always end with a follow-up offer to help.
 
-Messaging: If the user wants to contact or message a lawyer, FIRST you must have their valid lawyerId.
-- If you DO NOT have the lawyerId (e.g., the user only gave a name), silently call the getLawyers tool to search for the lawyer. DO NOT tell the user you need to find the ID.
-- Once you have the lawyerId and the user wants to send a message, draft a professional message and ask the user: "Here is the draft message: [message]. Should I send it?"
-- Do NOT call sendMessageToLawyer until the user explicitly confirms they want to send it.
+LANGUAGE DETECTION — reply in the EXACT language the user uses:
+- Tunisian Derja: words/patterns like "chkoun", "kifesh", "besh", "mta3", "barsha", "3andek", "mazel", "haka", "wach", "7al", "mochkla", numbers as letters (3=ع, 7=ح, 9=ق). Reply warmly in Derja like a Tunisian friend who knows law. Example: "Ahh wakha, el mochkla mte3k clara. Fi el qanoun ettounsi..."
+- French → reply in French.
+- Arabic (فصحى) → reply in formal Arabic.
+- English → reply in English.
+- Code-switching (mix of languages) → match their mix.
 
-Important: When calling sendMessageToLawyer, you MUST use a valid lawyerId. Do NOT guess or hallucinate UUIDs.
+LAWYER RECOMMENDATIONS: Always call getLawyers tool for real data. Never invent IDs or names.
 
-Confirmation: ONLY call sendMessageToLawyer after the user explicitly confirms (e.g., 'Yes', 'Send it', 'Go ahead').
+MESSAGING A LAWYER (mandatory 2-step):
+1. Call getLawyers to get the real lawyerId from the database THIS turn.
+2. Only call sendMessageToLawyer using an ID returned by getLawyers in THIS turn — never from memory.
+Draft the message first, show it to the user, and only send after explicit confirmation.
 
-Tone: Be professional but friendly. Respond in Tunisian Derja if the user writes in Derja, in French if they write in French, otherwise English or Arabic.
+LEGAL EXPERTISE: Tunisian Personal Status Code, Labor Law, Commercial Law, Criminal Code, civil procedure. Cite articles when known.
 
-Images and Files: The user may send you images or documents. Analyze them as best you can to assist the user. If they sent a document, you might not be able to read its contents directly if it's a PDF, but you can read images. Inform the user what you see.
-
-Legal Context (use this to answer law questions):
-${contextText || 'No specific legal articles found for this query. Answer based on general Tunisian law knowledge.'}`;
+RAG CONTEXT:
+${contextText || 'No specific articles found. Use general Tunisian law knowledge.'}`;
 
       const conversationHistory = historyRows.map(row => ({
         role: row.sender === 'user' ? 'user' : 'model',
@@ -308,7 +329,7 @@ ${contextText || 'No specific legal articles found for this query. Answer based 
           contents: currentContents,
           config: {
             systemInstruction,
-            temperature: 0.4,
+            temperature: 0.65,
             tools: [{ functionDeclarations: lawyerAppTools }],
           },
         });
@@ -329,7 +350,7 @@ ${contextText || 'No specific legal articles found for this query. Answer based 
             let lawyerId = call.args.lawyerId;
             const messageBody = call.args.messageBody;
 
-            // Validate lawyerId — must be a UUID.
+            // ── Guard 1: must be a UUID format ──
             const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             if (!lawyerId || !UUID_REGEX.test(lawyerId)) {
               console.log(`[AI Agent] lawyerId "${lawyerId}" is not a UUID — auto-resolving via getLawyers...`);
@@ -344,7 +365,37 @@ ${contextText || 'No specific legal articles found for this query. Answer based 
               }
             }
 
+            // ── Guard 2: even if UUID-shaped, verify it actually exists in DB ──
+            // This catches hallucinated UUIDs from weaker fallback models.
             if (lawyerId) {
+              const { rows: lawyerCheck } = await pool.query(
+                'SELECT id, full_name FROM users WHERE id = $1 AND role = $2',
+                [lawyerId, 'lawyer']
+              );
+              if (lawyerCheck.length === 0) {
+                // UUID exists in format but not in DB — model hallucinated it.
+                // Try to recover by searching by name extracted from messageBody.
+                console.warn(`[AI Agent] lawyerId ${lawyerId} not in DB (hallucinated). Attempting name-based recovery...`);
+                // Extract potential name from messageBody (look for capitalized words)
+                const nameMatch = messageBody?.match(/(?:Mr\.?|Maître|Maitre|Dr\.?|Me\.?|أستاذ|استاذ)?\s*([A-ZÀ-Ö][a-zà-ö]+(?:\s+[A-ZÀ-Ö][a-zà-ö]+)+)/)?.[1]
+                  || messageBody?.match(/([غ-ي][\u0600-\u06FF ]{2,20})/)?.[0]
+                  || '';
+                const recoveryList = await getLawyers(undefined, undefined, nameMatch.trim());
+                if (Array.isArray(recoveryList) && recoveryList.length > 0) {
+                  lawyerId = recoveryList[0].id;
+                  console.log(`[AI Agent] Recovery succeeded: resolved to ${lawyerId} (${recoveryList[0].name})`);
+                } else {
+                  // Last resort: return all lawyers and let the model pick
+                  const allLawyers = await getLawyers();
+                  toolResult = {
+                    error: `The lawyer ID I tried to use was not found in the database. Here are the available lawyers:\n${JSON.stringify(allLawyers)}\n\nPlease call sendMessageToLawyer again using one of the IDs above.`,
+                  };
+                  lawyerId = null;
+                }
+              }
+            }
+
+            if (lawyerId && !toolResult) {
               toolResult = await sendMessageToLawyer(lawyerId, messageBody, req.user.id);
             }
           } else {

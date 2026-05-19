@@ -498,10 +498,10 @@ export default function UserInboxPage() {
           ]}
         >
           <View style={styles.headerTop}>
-            <Text style={[styles.heading, { color: C.tint }]}>{t.inbox || 'Messages'}</Text>
+            <Text style={[styles.heading, { color: C.tint }]}>{t.inbox}</Text>
             {unreadTotal > 0 && (
               <View style={[styles.totalBadge, { backgroundColor: C.accentLight }]}>
-                <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} unread</Text>
+                <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} {t.unread}</Text>
               </View>
             )}
           </View>
@@ -541,8 +541,8 @@ export default function UserInboxPage() {
                   </View>
                   <Text style={[styles.rowPreview, { color: C.textSecondary }]} numberOfLines={1}>
                     {Boolean(typingByConversation[item.id])
-                      ? 'Typing...'
-                      : item.last_message_preview?.trim() || 'No messages yet'}
+                      ? t.typingDots
+                      : item.last_message_preview?.trim() || t.noMessagesYet}
                   </Text>
                 </View>
 
@@ -566,9 +566,9 @@ export default function UserInboxPage() {
             ListEmptyComponent={
               <View style={styles.center}>
                 <Ionicons name="chatbubble-ellipses-outline" size={44} color={C.mutedForeground} />
-                <Text style={[styles.emptyTitle, { color: C.foreground }]}>No conversations yet</Text>
+                <Text style={[styles.emptyTitle, { color: C.foreground }]}>{t.noConversationsYet}</Text>
                 <Text style={[styles.emptyText, { color: C.textSecondary }]}>
-                  Hire a lawyer to start messaging
+                  {t.hireToMessage}
                 </Text>
               </View>
             }
@@ -739,7 +739,7 @@ export default function UserInboxPage() {
                 {otherTyping && (
                   <View style={styles.typingIndicator}>
                     <Text style={[styles.typingText, { color: C.mutedForeground }]}>
-                      Lawyer is typing
+                      {t.lawyerIsTyping}
                     </Text>
                     <View style={styles.dots}>
                       <View style={[styles.dot, { backgroundColor: C.mutedForeground }]} />
@@ -763,7 +763,7 @@ export default function UserInboxPage() {
                   </Pressable>
                   <TextInput
                     style={[styles.input, { color: C.foreground }]}
-                    placeholder="Type a message..."
+                    placeholder={t.typeAMessage}
                     placeholderTextColor={C.mutedForeground}
                     value={chatInput}
                     onChangeText={onChangeInput}

@@ -179,7 +179,7 @@ export default function LawyerProfilePage() {
           <View style={styles.prefRowItem}>
             <View style={styles.prefLeft}>
               <Ionicons name="notifications-outline" size={18} color={C.accent} />
-              <Text style={[styles.prefLabel, { color: C.foreground }]}>Accept Cases</Text>
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>{t.acceptCases}</Text>
             </View>
             <Switch
               value={isAvailable}
@@ -194,7 +194,7 @@ export default function LawyerProfilePage() {
           <View style={styles.prefRowItem}>
             <View style={styles.prefLeft}>
               <Ionicons name="moon-outline" size={18} color={C.accent} />
-              <Text style={[styles.prefLabel, { color: C.foreground }]}>Display Mode</Text>
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>{t.displayMode}</Text>
             </View>
             <View style={styles.themeToggleCompact}>
               {['light', 'dark'].map((mode) => (
@@ -241,7 +241,7 @@ export default function LawyerProfilePage() {
         </View>
 
         <View style={styles.menuSection}>
-          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Account Settings</Text>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>{t.accountSettings}</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
             {accountItems.map((item, i) => (
               <Pressable
@@ -258,7 +258,7 @@ export default function LawyerProfilePage() {
         </View>
 
         <View style={styles.menuSection}>
-          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Support</Text>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>{t.support}</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
             {supportItems.map((item, i) => (
               <Pressable

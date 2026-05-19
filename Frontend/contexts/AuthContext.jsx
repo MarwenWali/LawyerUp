@@ -35,12 +35,9 @@ export function AuthProvider({ children }) {
       const token = await getToken();
       if (token) {
         try {
-          const supabaseSessionReady = await hasSupabaseSession();
-          if (!supabaseSessionReady) {
-            console.warn('Supabase session not available; continuing with JWT auth');
-          }
+          await hasSupabaseSession();
         } catch (supabaseError) {
-          console.warn('Supabase session check failed:', supabaseError.message);
+          // silently ignore supabase check failures on startup
         }
 
         const data = await authApi.verify();

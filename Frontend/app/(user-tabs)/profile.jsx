@@ -142,7 +142,7 @@ export default function ProfilePage() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={[styles.profileNameLarge, { color: C.foreground }]}>{user?.name}</Text>
                 <View style={[styles.roleBadgeSmall, { backgroundColor: C.accentLight }]}>
-                  <Text style={[styles.roleTextSmall, { color: C.accent }]}>Citizen</Text>
+                  <Text style={[styles.roleTextSmall, { color: C.accent }]}>{t.citizen}</Text>
                 </View>
               </View>
               <Text style={[styles.profileEmailSmall, { color: C.textSecondary }]}>{user?.email}</Text>
@@ -158,7 +158,7 @@ export default function ProfilePage() {
           <View style={styles.prefRowItem}>
             <View style={styles.prefLeft}>
               <Ionicons name="moon-outline" size={18} color={C.accent} />
-              <Text style={[styles.prefLabel, { color: C.foreground }]}>Display Mode</Text>
+              <Text style={[styles.prefLabel, { color: C.foreground }]}>{t.displayMode}</Text>
             </View>
             <View style={styles.themeToggleCompact}>
               {['light', 'dark'].map((mode) => (
@@ -186,7 +186,7 @@ export default function ProfilePage() {
             <View style={styles.prefTopRow}>
               <View style={styles.prefLeft}>
                 <Ionicons name="language-outline" size={18} color={C.accent} />
-                <Text style={[styles.prefLabel, { color: C.foreground }]}>Language</Text>
+                <Text style={[styles.prefLabel, { color: C.foreground }]}>{t.language}</Text>
               </View>
             </View>
             <View style={styles.langPillContainer}>
@@ -214,7 +214,7 @@ export default function ProfilePage() {
 
         {/* ── 3. Grouped Menu Sections ── */}
         <View style={styles.menuSection}>
-          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>My Account</Text>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>{t.myAccount}</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
             {accountItems.map((item, i) => (
               <Pressable
@@ -231,7 +231,7 @@ export default function ProfilePage() {
         </View>
 
         <View style={styles.menuSection}>
-          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Legal</Text>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>{t.legal}</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
             {legalItems.map((item, i) => (
               <Pressable
@@ -248,7 +248,7 @@ export default function ProfilePage() {
         </View>
 
         <View style={styles.menuSection}>
-          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>Settings</Text>
+          <Text style={[styles.menuSectionTitle, { color: C.mutedForeground }]}>{t.settings}</Text>
           <View style={[styles.menuGroupCard, { backgroundColor: C.card }]}>
             {settingItems.map((item, i) => (
               <Pressable

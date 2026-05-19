@@ -508,10 +508,10 @@ export default function LawyerInboxPage() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10, borderBottomColor: C.border, backgroundColor: C.headerBg }]}>
         <View style={styles.headerTop}>
-          <Text style={[styles.heading, { color: C.tint }]}>{t.inbox || 'Inbox'}</Text>
+          <Text style={[styles.heading, { color: C.tint }]}>{t.inbox}</Text>
           {unreadTotal > 0 && (
             <View style={[styles.totalBadge, { backgroundColor: C.accentLight }]}>
-              <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} unread</Text>
+              <Text style={[styles.totalBadgeText, { color: C.accent }]}>{unreadTotal} {t.unread}</Text>
             </View>
           )}
         </View>
@@ -531,7 +531,7 @@ export default function LawyerInboxPage() {
             ) : (
               <Ionicons name="paper-plane-outline" size={16} color={C.primaryForeground} />
             )}
-            <Text style={[styles.startAdminBtnText, { color: C.primaryForeground }]}>Start Admin Chat</Text>
+            <Text style={[styles.startAdminBtnText, { color: C.primaryForeground }]}>{t.startAdminChat}</Text>
           </Pressable>
         )}
       </View>
@@ -556,9 +556,9 @@ export default function LawyerInboxPage() {
           ListEmptyComponent={
             <View style={styles.center}>
               <Ionicons name="chatbubble-ellipses-outline" size={44} color={C.mutedForeground} />
-              <Text style={[styles.emptyTitle, { color: C.foreground }]}>No conversations yet</Text>
+              <Text style={[styles.emptyTitle, { color: C.foreground }]}>{t.noConversationsYet}</Text>
               <Text style={[styles.emptyText, { color: C.textSecondary }]}>
-                Your messages will appear here. Start chatting with support or awaiting client inquiries.
+                {t.awaitingClients}
               </Text>
             </View>
           }

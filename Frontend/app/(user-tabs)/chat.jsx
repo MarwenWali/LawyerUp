@@ -341,7 +341,7 @@ export default function ChatPage() {
     return (
       <View style={[styles.container, { backgroundColor: C.background, justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={C.accent} size="large" />
-        <Text style={{ color: C.textSecondary, marginTop: 12, fontFamily: 'Inter_400Regular' }}>Loading chats…</Text>
+        <Text style={{ color: C.textSecondary, marginTop: 12, fontFamily: 'Inter_400Regular' }}>{t.loadingChats}</Text>
       </View>
     );
   }
@@ -351,14 +351,14 @@ export default function ChatPage() {
     return (
       <View style={[styles.container, { backgroundColor: C.background }]}>
         <View style={[styles.historyHeader, { paddingTop: insets.top + 8, backgroundColor: C.headerBg, borderBottomColor: C.border }]}>
-          <Text style={[styles.historyTitle, { color: C.tint }]}>Chat History</Text>
+          <Text style={[styles.historyTitle, { color: C.tint }]}>{t.chatHistory}</Text>
           <Pressable
             style={({ pressed }) => [styles.newChatBtn, { backgroundColor: C.tint }, pressed && { opacity: 0.8 }, creating && { opacity: 0.5 }]}
             onPress={startNewChat} disabled={creating}
           >
             {creating
               ? <ActivityIndicator size="small" color={C.primaryForeground} />
-              : <><Feather name="plus" size={16} color={C.primaryForeground} /><Text style={[styles.newChatBtnText, { color: C.primaryForeground }]}>New Chat</Text></>
+              : <><Feather name="plus" size={16} color={C.primaryForeground} /><Text style={[styles.newChatBtnText, { color: C.primaryForeground }]}>{t.newChat}</Text></>
             }
           </Pressable>
         </View>
@@ -366,15 +366,15 @@ export default function ChatPage() {
         {sessions.length === 0 ? (
           <View style={styles.emptyHistory}>
             <Ionicons name="chatbubbles-outline" size={64} color={C.mutedForeground} />
-            <Text style={[styles.emptyTitle, { color: C.foreground }]}>No chats yet</Text>
-            <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>Start a new conversation with your AI legal assistant</Text>
+            <Text style={[styles.emptyTitle, { color: C.foreground }]}>{t.noChatsYetTitle}</Text>
+            <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>{t.startConversationWithAI}</Text>
             <Pressable
               style={({ pressed }) => [styles.emptyNewBtn, { backgroundColor: C.tint }, pressed && { opacity: 0.8 }]}
               onPress={startNewChat} disabled={creating}
             >
               {creating
                 ? <ActivityIndicator size="small" color={C.primaryForeground} />
-                : <Text style={[styles.newChatBtnText, { color: C.primaryForeground }]}>Start a Chat</Text>}
+                : <Text style={[styles.newChatBtnText, { color: C.primaryForeground }]}>{t.startChat}</Text>}
             </Pressable>
           </View>
         ) : (
@@ -387,7 +387,7 @@ export default function ChatPage() {
             contentContainerStyle={{ padding: 16, paddingBottom: tabBarHeight + 16, gap: 10 }}
             showsVerticalScrollIndicator={false}
             ListHeaderComponent={
-              <Text style={[styles.historyHint, { color: C.mutedForeground }]}>Tap to open · Long-press to delete</Text>
+              <Text style={[styles.historyHint, { color: C.mutedForeground }]}>{t.chatHint}</Text>
             }
           />
         )}
@@ -413,7 +413,7 @@ export default function ChatPage() {
             </Text>
             <View style={styles.statusRow}>
               <View style={styles.onlineDot} />
-              <Text style={[styles.statusText, { color: C.textSecondary }]}>Specialized in Tunisian Law</Text>
+              <Text style={[styles.statusText, { color: C.textSecondary }]}>{t.specializedIn}</Text>
             </View>
           </View>
         </View>
@@ -487,7 +487,7 @@ export default function ChatPage() {
 
             <TextInput
               style={[styles.textInput, { color: C.foreground }]}
-              placeholder="Ask a legal question..."
+              placeholder={t.askLegalQuestion}
               placeholderTextColor={C.mutedForeground}
               value={input}
               onChangeText={setInput}
